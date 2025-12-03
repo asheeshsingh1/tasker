@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ObjectId } from "mongodb";
-import { connectToDatabase, User } from "../../lib/mongodb";
-import { getUserFromRequest } from "../../lib/auth";
+import { connectToDatabase, User } from "../_lib/mongodb";
+import { getUserFromRequest } from "../_lib/auth";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow GET

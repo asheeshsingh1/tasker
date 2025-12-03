@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import bcrypt from "bcryptjs";
-import { connectToDatabase, User } from "../../lib/mongodb";
-import { signToken } from "../../lib/auth";
+import { connectToDatabase, User } from "../_lib/mongodb";
+import { signToken } from "../_lib/auth";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST
