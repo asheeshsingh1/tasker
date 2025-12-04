@@ -112,6 +112,9 @@ body {
 .app-subtitle {
   font-size: 0.9rem;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Progress Bar */
@@ -876,12 +879,17 @@ body {
   }
   
   .header-row {
-    flex-direction: column;
-    gap: 0.75rem;
+    flex-direction: row;
+    align-items: center;
+  }
+  
+  .header-row > div {
+    flex: 1;
+    min-width: 0;
   }
   
   .logout-btn {
-    align-self: flex-start;
+    flex-shrink: 0;
   }
   
   .filter-group {
