@@ -159,13 +159,20 @@ type SortOption = "newest" | "oldest" | "name" | "completed-fast" | "completed-s
 // Helper functions for date filtering
 function getDaysDiff(date: Date): number {
   const now = new Date();
-  const diffTime = now.getTime() - date.getTime();
-  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  // Compare dates only (ignore time) to avoid timezone issues
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffTime = todayStart.getTime() - dateStart.getTime();
+  const days = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  // Ensure we never return negative days
+  return Math.max(0, days);
 }
 
 function isToday(date: Date): boolean {
   const today = new Date();
-  return date.toDateString() === today.toDateString();
+  return date.getFullYear() === today.getFullYear() &&
+         date.getMonth() === today.getMonth() &&
+         date.getDate() === today.getDate();
 }
 
 function isWithinWeek(date: Date): boolean {
@@ -192,12 +199,21 @@ function formatDuration(createdAt: string, completedAt: string | null): string |
 
 function formatRelativeDate(dateStr: string): string {
   const date = new Date(dateStr);
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    return "Unknown";
+  }
+  
   const days = getDaysDiff(date);
   
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? 's' : ''} ago`;
+  if (days < 30) {
+    const weeks = Math.floor(days / 7);
+    return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+  }
   return date.toLocaleDateString();
 }
 
