@@ -1,4 +1,4 @@
-import { MongoClient, Db } from "mongodb";
+import { MongoClient, Db, ObjectId } from "mongodb";
 
 let cachedClient: MongoClient | null = null;
 let cachedDb: Db | null = null;
@@ -36,7 +36,7 @@ export async function connectToDatabase(): Promise<{ client: MongoClient; db: Db
 
 // User type
 export interface User {
-  _id?: string;
+  _id?: ObjectId;
   email: string;
   password: string;
   name: string;
@@ -45,11 +45,14 @@ export interface User {
 
 // Todo type
 export interface Todo {
-  _id?: string;
+  _id?: ObjectId;
   userId: string;
   text: string;
   completed: boolean;
   createdAt: Date;
   completedAt: Date | null;
 }
+
+// Re-export ObjectId for convenience
+export { ObjectId };
 

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ObjectId } from "mongodb";
-import { connectToDatabase, Todo } from "../_lib/mongodb";
-import { getUserFromRequest } from "../_lib/auth";
+import { connectToDatabase, Todo } from "../_lib/mongodb.js";
+import { getUserFromRequest } from "../_lib/auth.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Authenticate
