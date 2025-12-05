@@ -264,7 +264,11 @@ function getFrequencyLabel(freq: RecurringFrequency, customDays?: number | null,
 }
 
 function getTodayString(): string {
-  return new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function canCompleteToday(task: RecurringTask): { canComplete: boolean; reason?: string } {
@@ -626,7 +630,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     }
   };
 
-  const toggleRecurringTask = async (id: number, isActive: boolean) => {
+  const toggleRecurringTask = async (id: string, isActive: boolean) => {
     try {
       const updated = await recurring.update(id, { isActive });
       setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
@@ -635,7 +639,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     }
   };
 
-  const completeRecurringTask = async (id: number) => {
+  const completeRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.complete(id);
       setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
@@ -644,7 +648,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     }
   };
 
-  const uncompleteRecurringTask = async (id: number) => {
+  const uncompleteRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.uncomplete(id);
       setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
@@ -653,7 +657,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     }
   };
 
-  const startRecurringTask = async (id: number) => {
+  const startRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.start(id);
       setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
@@ -662,7 +666,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     }
   };
 
-  const pauseRecurringTask = async (id: number) => {
+  const pauseRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.pause(id);
       setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
@@ -671,7 +675,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     }
   };
 
-  const resumeRecurringTask = async (id: number) => {
+  const resumeRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.resume(id);
       setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
@@ -680,7 +684,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     }
   };
 
-  const editRecurringTask = async (id: number, data: { text?: string; frequency?: RecurringFrequency; dayOfWeek?: number; dayOfMonth?: number }) => {
+  const editRecurringTask = async (id: string, data: { text?: string; frequency?: RecurringFrequency; dayOfWeek?: number; dayOfMonth?: number }) => {
     try {
       const updated = await recurring.update(id, data);
       setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
@@ -689,7 +693,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     }
   };
 
-  const deleteRecurringTask = async (id: number) => {
+  const deleteRecurringTask = async (id: string) => {
     try {
       await recurring.delete(id);
       setRecurringTasks(recurringTasks.filter((t) => t.id !== id));
@@ -1522,13 +1526,13 @@ function RecurringTaskForm({ onSubmit, onCancel }: RecurringTaskFormProps) {
 // Recurring Task Item Component
 interface RecurringTaskItemProps {
   task: RecurringTask;
-  onStart: (id: number) => void;
-  onComplete: (id: number) => void;
-  onUncomplete: (id: number) => void;
-  onPause: (id: number) => void;
-  onResume: (id: number) => void;
-  onEdit: (id: number, data: { text?: string; frequency?: RecurringFrequency; dayOfWeek?: number; dayOfMonth?: number }) => void;
-  onDelete: (id: number) => void;
+  onStart: (id: string) => void;
+  onComplete: (id: string) => void;
+  onUncomplete: (id: string) => void;
+  onPause: (id: string) => void;
+  onResume: (id: string) => void;
+  onEdit: (id: string, data: { text?: string; frequency?: RecurringFrequency; dayOfWeek?: number; dayOfMonth?: number }) => void;
+  onDelete: (id: string) => void;
 }
 
 function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, onResume, onEdit, onDelete }: RecurringTaskItemProps) {

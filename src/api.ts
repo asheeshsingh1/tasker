@@ -133,7 +133,7 @@ export interface CompletionRecord {
 }
 
 export interface RecurringTask {
-  id: number;
+  id: string;
   text: string;
   frequency: RecurringFrequency;
   customDays: number | null;
@@ -177,43 +177,43 @@ export const recurring = {
       body: JSON.stringify(data),
     }),
 
-  update: (id: number, data: UpdateRecurringTaskData) =>
+  update: (id: string, data: UpdateRecurringTaskData) =>
     request<RecurringTask>(`/recurring/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
 
-  delete: (id: number) =>
+  delete: (id: string) =>
     request<void>(`/recurring/${id}`, { method: "DELETE" }),
 
   generate: () =>
     request<GenerateResult>("/recurring/generate", { method: "POST" }),
 
-  complete: (id: number) =>
+  complete: (id: string) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
       body: JSON.stringify({ action: 'complete', clientDate: getLocalDateString() }),
     }),
 
-  uncomplete: (id: number) =>
+  uncomplete: (id: string) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
       body: JSON.stringify({ action: 'uncomplete', clientDate: getLocalDateString() }),
     }),
 
-  start: (id: number) =>
+  start: (id: string) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
       body: JSON.stringify({ action: 'start', clientDate: getLocalDateString() }),
     }),
 
-  pause: (id: number) =>
+  pause: (id: string) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
       body: JSON.stringify({ action: 'pause', clientDate: getLocalDateString() }),
     }),
 
-  resume: (id: number) =>
+  resume: (id: string) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
       body: JSON.stringify({ action: 'resume', clientDate: getLocalDateString() }),
