@@ -101,10 +101,16 @@ export const todos = {
     }),
 
   pause: (id: string) =>
-    request<Todo>(`/todos/${id}/pause`, { method: "POST" }),
+    request<Todo>(`/todos/${id}`, { 
+      method: "POST",
+      body: JSON.stringify({ action: 'pause' }),
+    }),
 
   resume: (id: string) =>
-    request<Todo>(`/todos/${id}/resume`, { method: "POST" }),
+    request<Todo>(`/todos/${id}`, { 
+      method: "POST",
+      body: JSON.stringify({ action: 'resume' }),
+    }),
 
   delete: (id: string) =>
     request<void>(`/todos/${id}`, { method: "DELETE" }),
@@ -184,17 +190,32 @@ export const recurring = {
     request<GenerateResult>("/recurring/generate", { method: "POST" }),
 
   complete: (id: number) =>
-    request<RecurringTask>(`/recurring/${id}/complete`, { method: "POST" }),
+    request<RecurringTask>(`/recurring/${id}`, { 
+      method: "POST",
+      body: JSON.stringify({ action: 'complete' }),
+    }),
 
   uncomplete: (id: number) =>
-    request<RecurringTask>(`/recurring/${id}/uncomplete`, { method: "POST" }),
+    request<RecurringTask>(`/recurring/${id}`, { 
+      method: "POST",
+      body: JSON.stringify({ action: 'uncomplete' }),
+    }),
 
   start: (id: number) =>
-    request<RecurringTask>(`/recurring/${id}/start`, { method: "POST" }),
+    request<RecurringTask>(`/recurring/${id}`, { 
+      method: "POST",
+      body: JSON.stringify({ action: 'start' }),
+    }),
 
   pause: (id: number) =>
-    request<RecurringTask>(`/recurring/${id}/pause`, { method: "POST" }),
+    request<RecurringTask>(`/recurring/${id}`, { 
+      method: "POST",
+      body: JSON.stringify({ action: 'pause' }),
+    }),
 
   resume: (id: number) =>
-    request<RecurringTask>(`/recurring/${id}/resume`, { method: "POST" }),
+    request<RecurringTask>(`/recurring/${id}`, { 
+      method: "POST",
+      body: JSON.stringify({ action: 'resume' }),
+    }),
 };

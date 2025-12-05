@@ -49,6 +49,7 @@ app.delete('/api/todos', async (req, res) => {
   return handler(req, res);
 });
 
+// Single todo routes (PATCH, DELETE, POST for actions)
 app.patch('/api/todos/:id', async (req, res) => {
   req.query = { id: req.params.id };
   const handler = await loadHandler('./api/todos/[id].ts');
@@ -61,16 +62,9 @@ app.delete('/api/todos/:id', async (req, res) => {
   return handler(req, res);
 });
 
-// Pause/Resume routes
-app.post('/api/todos/:id/pause', async (req, res) => {
+app.post('/api/todos/:id', async (req, res) => {
   req.query = { id: req.params.id };
-  const handler = await loadHandler('./api/todos/[id]/pause.ts');
-  return handler(req, res);
-});
-
-app.post('/api/todos/:id/resume', async (req, res) => {
-  req.query = { id: req.params.id };
-  const handler = await loadHandler('./api/todos/[id]/resume.ts');
+  const handler = await loadHandler('./api/todos/[id].ts');
   return handler(req, res);
 });
 
@@ -85,6 +79,12 @@ app.post('/api/recurring', async (req, res) => {
   return handler(req, res);
 });
 
+app.post('/api/recurring/generate', async (req, res) => {
+  const handler = await loadHandler('./api/recurring/generate.ts');
+  return handler(req, res);
+});
+
+// Single recurring task routes (PATCH, DELETE, POST for actions)
 app.patch('/api/recurring/:id', async (req, res) => {
   req.query = { id: req.params.id };
   const handler = await loadHandler('./api/recurring/[id].ts');
@@ -97,38 +97,9 @@ app.delete('/api/recurring/:id', async (req, res) => {
   return handler(req, res);
 });
 
-app.post('/api/recurring/generate', async (req, res) => {
-  const handler = await loadHandler('./api/recurring/generate.ts');
-  return handler(req, res);
-});
-
-app.post('/api/recurring/:id/complete', async (req, res) => {
+app.post('/api/recurring/:id', async (req, res) => {
   req.query = { id: req.params.id };
-  const handler = await loadHandler('./api/recurring/[id]/complete.ts');
-  return handler(req, res);
-});
-
-app.post('/api/recurring/:id/uncomplete', async (req, res) => {
-  req.query = { id: req.params.id };
-  const handler = await loadHandler('./api/recurring/[id]/uncomplete.ts');
-  return handler(req, res);
-});
-
-app.post('/api/recurring/:id/start', async (req, res) => {
-  req.query = { id: req.params.id };
-  const handler = await loadHandler('./api/recurring/[id]/start.ts');
-  return handler(req, res);
-});
-
-app.post('/api/recurring/:id/pause', async (req, res) => {
-  req.query = { id: req.params.id };
-  const handler = await loadHandler('./api/recurring/[id]/pause.ts');
-  return handler(req, res);
-});
-
-app.post('/api/recurring/:id/resume', async (req, res) => {
-  req.query = { id: req.params.id };
-  const handler = await loadHandler('./api/recurring/[id]/resume.ts');
+  const handler = await loadHandler('./api/recurring/[id].ts');
   return handler(req, res);
 });
 
@@ -138,4 +109,3 @@ app.listen(PORT, HOST, () => {
   console.log(`🚀 API server running on http://localhost:${PORT}`);
   console.log(`📱 Access from phone: http://192.168.1.2:${PORT}`);
 });
-

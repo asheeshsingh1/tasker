@@ -3,6 +3,61 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase, RecurringTask, RecurringFrequency } from "../_lib/mongodb.js";
 import { getUserFromRequest } from "../_lib/auth.js";
 
+// Get today's date as YYYY-MM-DD string
+function getTodayString(): string {
+  const today = new Date();
+  return today.toISOString().split('T')[0];
+}
+
+// Check if today is a valid day for this recurring task
+function isTodayScheduled(task: RecurringTask): boolean {
+  const now = new Date();
+  const today = now.getDay(); // 0-6, Sunday = 0
+  const todayDate = now.getDate(); // 1-31
+
+  switch (task.frequency) {
+    case 'daily':
+      return true;
+    case 'weekly':
+      return task.dayOfWeek === today;
+    case 'monthly':
+      return task.dayOfMonth === todayDate;
+    default:
+      return true;
+  }
+}
+
+// Check if today is a valid day to complete this recurring task (with reason)
+function canCompleteToday(task: RecurringTask): { canComplete: boolean; reason?: string } {
+  const now = new Date();
+  const today = now.getDay();
+  const todayDate = now.getDate();
+
+  switch (task.frequency) {
+    case 'daily':
+      return { canComplete: true };
+    case 'weekly':
+      if (task.dayOfWeek === today) {
+        return { canComplete: true };
+      }
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      return { 
+        canComplete: false, 
+        reason: `This task can only be completed on ${dayNames[task.dayOfWeek ?? 0]}` 
+      };
+    case 'monthly':
+      if (task.dayOfMonth === todayDate) {
+        return { canComplete: true };
+      }
+      return { 
+        canComplete: false, 
+        reason: `This task can only be completed on day ${task.dayOfMonth} of the month` 
+      };
+    default:
+      return { canComplete: true };
+  }
+}
+
 // Helper to format recurring task for response
 function formatRecurringTask(t: RecurringTask) {
   return {
@@ -16,6 +71,15 @@ function formatRecurringTask(t: RecurringTask) {
     lastGenerated: t.lastGenerated?.toISOString() || null,
     isActive: t.isActive,
     createdAt: t.createdAt.toISOString(),
+    completions: (t.completions || []).map(c => ({
+      scheduledDate: c.scheduledDate,
+      completedAt: c.completedAt?.toISOString() || null,
+      status: c.status,
+      startedAt: c.startedAt?.toISOString() || null,
+      pausedAt: c.pausedAt?.toISOString() || null,
+      totalPausedTime: c.totalPausedTime || 0,
+      timeTaken: c.timeTaken ?? null,
+    })),
   };
 }
 
@@ -37,7 +101,6 @@ function calculateNextDue(
         next.setDate(next.getDate() + 1);
       }
       break;
-    
     case 'weekly':
       const targetDay = dayOfWeek ?? 1;
       const currentDay = now.getDay();
@@ -47,7 +110,6 @@ function calculateNextDue(
       }
       next.setDate(next.getDate() + daysUntilTarget);
       break;
-    
     case 'monthly':
       const targetDayOfMonth = dayOfMonth ?? 1;
       next.setDate(targetDayOfMonth);
@@ -56,7 +118,6 @@ function calculateNextDue(
         next.setDate(targetDayOfMonth);
       }
       break;
-    
     case 'custom':
       const days = customDays ?? 1;
       next.setDate(next.getDate() + days);
@@ -66,8 +127,212 @@ function calculateNextDue(
   return next;
 }
 
+// Action handlers
+async function handleStart(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
+  if (!isTodayScheduled(existing)) {
+    throw new Error("Today is not a scheduled day for this task");
+  }
+
+  const todayStr = getTodayString();
+  const completions = existing.completions || [];
+  const existingCompletion = completions.find(c => c.scheduledDate === todayStr);
+
+  if (existingCompletion?.status === 'completed') {
+    throw new Error("Task already completed for today");
+  }
+  if (existingCompletion?.status === 'in_progress' || existingCompletion?.status === 'paused') {
+    throw new Error("Task already started");
+  }
+
+  const existingIndex = completions.findIndex(c => c.scheduledDate === todayStr);
+  const now = new Date();
+  
+  if (existingIndex >= 0) {
+    completions[existingIndex] = {
+      ...completions[existingIndex],
+      status: 'in_progress',
+      startedAt: now,
+      pausedAt: null,
+      totalPausedTime: 0,
+    };
+  } else {
+    completions.push({
+      scheduledDate: todayStr,
+      completedAt: null,
+      status: 'in_progress',
+      startedAt: now,
+      pausedAt: null,
+      totalPausedTime: 0,
+      timeTaken: null,
+    });
+  }
+
+  completions.sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate));
+
+  await recurringTasks.updateOne(
+    { _id: existing._id },
+    { $set: { completions } }
+  );
+
+  return await recurringTasks.findOne({ _id: existing._id });
+}
+
+async function handlePause(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
+  if (!isTodayScheduled(existing)) {
+    throw new Error("Today is not a scheduled day for this task");
+  }
+
+  const todayStr = getTodayString();
+  const completions = existing.completions || [];
+  const existingCompletion = completions.find(c => c.scheduledDate === todayStr);
+
+  if (existingCompletion?.status === 'completed') {
+    throw new Error("Task already completed for today");
+  }
+  if (existingCompletion?.status === 'paused') {
+    throw new Error("Task is already paused");
+  }
+  if (!existingCompletion || existingCompletion.status !== 'in_progress') {
+    throw new Error("Task must be started before pausing");
+  }
+
+  const existingIndex = completions.findIndex(c => c.scheduledDate === todayStr);
+  
+  completions[existingIndex] = {
+    ...completions[existingIndex],
+    status: 'paused',
+    pausedAt: new Date(),
+  };
+
+  completions.sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate));
+
+  await recurringTasks.updateOne(
+    { _id: existing._id },
+    { $set: { completions } }
+  );
+
+  return await recurringTasks.findOne({ _id: existing._id });
+}
+
+async function handleResume(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
+  const todayStr = getTodayString();
+  const completions = existing.completions || [];
+  const existingIndex = completions.findIndex(c => c.scheduledDate === todayStr);
+  const existingCompletion = existingIndex >= 0 ? completions[existingIndex] : null;
+
+  if (!existingCompletion || existingCompletion.status !== 'paused') {
+    throw new Error("Task is not paused");
+  }
+
+  const pausedAt = existingCompletion.pausedAt ? new Date(existingCompletion.pausedAt) : new Date();
+  const pausedDuration = Date.now() - pausedAt.getTime();
+  const totalPausedTime = (existingCompletion.totalPausedTime || 0) + pausedDuration;
+
+  completions[existingIndex] = {
+    ...completions[existingIndex],
+    status: 'in_progress',
+    pausedAt: null,
+    totalPausedTime,
+  };
+
+  completions.sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate));
+
+  await recurringTasks.updateOne(
+    { _id: existing._id },
+    { $set: { completions } }
+  );
+
+  return await recurringTasks.findOne({ _id: existing._id });
+}
+
+async function handleComplete(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
+  if (!existing.isActive) {
+    throw new Error("Cannot complete an inactive recurring task");
+  }
+
+  const { canComplete, reason } = canCompleteToday(existing);
+  if (!canComplete) {
+    throw new Error(reason);
+  }
+
+  const todayStr = getTodayString();
+  const completions = existing.completions || [];
+  const existingCompletion = completions.find(c => c.scheduledDate === todayStr);
+
+  if (existingCompletion?.status === 'completed') {
+    throw new Error("Task already completed for today");
+  }
+  if (existingCompletion?.status === 'paused') {
+    throw new Error("Cannot complete a paused task. Resume it first.");
+  }
+  if (!existingCompletion || existingCompletion.status !== 'in_progress') {
+    throw new Error("Task must be started before marking complete");
+  }
+
+  const existingIndex = completions.findIndex(c => c.scheduledDate === todayStr);
+  const totalPausedTime = existingCompletion.totalPausedTime || 0;
+  const startedAt = existingCompletion.startedAt;
+  
+  if (!startedAt) {
+    throw new Error("Task must be started before marking complete");
+  }
+  
+  const now = new Date();
+  const timeTaken = now.getTime() - new Date(startedAt).getTime() - totalPausedTime;
+  
+  completions[existingIndex] = {
+    ...completions[existingIndex],
+    completedAt: now,
+    status: 'completed',
+    pausedAt: null,
+    totalPausedTime,
+    timeTaken,
+  };
+
+  completions.sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate));
+
+  await recurringTasks.updateOne(
+    { _id: existing._id },
+    { $set: { completions } }
+  );
+
+  return await recurringTasks.findOne({ _id: existing._id });
+}
+
+async function handleUncomplete(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
+  const todayStr = getTodayString();
+  const completions = existing.completions || [];
+  const existingIndex = completions.findIndex(c => c.scheduledDate === todayStr);
+  const existingCompletion = existingIndex >= 0 ? completions[existingIndex] : null;
+
+  if (!existingCompletion || existingCompletion.status !== 'completed') {
+    throw new Error("Task is not completed for today");
+  }
+
+  const now = new Date();
+  const completedAt = existingCompletion.completedAt ? new Date(existingCompletion.completedAt) : now;
+  const timeInCompletedState = now.getTime() - completedAt.getTime();
+  const newTotalPausedTime = (existingCompletion.totalPausedTime || 0) + timeInCompletedState;
+
+  completions[existingIndex] = {
+    ...completions[existingIndex],
+    completedAt: null,
+    status: 'in_progress',
+    timeTaken: null,
+    totalPausedTime: newTotalPausedTime,
+  };
+
+  completions.sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate));
+
+  await recurringTasks.updateOne(
+    { _id: existing._id },
+    { $set: { completions } }
+  );
+
+  return await recurringTasks.findOne({ _id: existing._id });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Authenticate
   const user = getUserFromRequest(req);
   if (!user) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -86,7 +351,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const recurringTasks = db.collection<RecurringTask>("recurring_tasks");
 
   try {
-    // Check ownership
     const existing = await recurringTasks.findOne({
       _id: new ObjectId(id),
       userId: user.userId,
@@ -94,6 +358,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!existing) {
       return res.status(404).json({ error: "Recurring task not found" });
+    }
+
+    // POST - Handle actions (start, pause, resume, complete, uncomplete)
+    if (req.method === "POST") {
+      const { action } = req.body;
+      
+      if (!action) {
+        return res.status(400).json({ error: "Action is required" });
+      }
+
+      try {
+        let updated: RecurringTask;
+        
+        switch (action) {
+          case 'start':
+            updated = await handleStart(existing, recurringTasks);
+            break;
+          case 'pause':
+            updated = await handlePause(existing, recurringTasks);
+            break;
+          case 'resume':
+            updated = await handleResume(existing, recurringTasks);
+            break;
+          case 'complete':
+            updated = await handleComplete(existing, recurringTasks);
+            break;
+          case 'uncomplete':
+            updated = await handleUncomplete(existing, recurringTasks);
+            break;
+          default:
+            return res.status(400).json({ error: `Unknown action: ${action}` });
+        }
+        
+        return res.json(formatRecurringTask(updated));
+      } catch (err: any) {
+        return res.status(400).json({ error: err.message });
+      }
     }
 
     // PATCH - Update recurring task
@@ -109,7 +410,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updates.isActive = isActive;
       }
 
-      // Track if we need to recalculate nextDue
       let needsRecalculation = false;
       let newFrequency = existing.frequency;
       let newCustomDays = existing.customDays;
@@ -166,4 +466,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
-

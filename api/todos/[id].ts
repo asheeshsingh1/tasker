@@ -18,8 +18,46 @@ function formatTodo(t: Todo) {
   };
 }
 
+// Action handlers
+async function handlePause(existing: Todo, todos: any): Promise<Todo> {
+  const currentStatus = existing.status || (existing.completed ? 'completed' : 'active');
+
+  if (currentStatus === 'paused') {
+    throw new Error("Todo is already paused");
+  }
+
+  if (currentStatus === 'completed' || existing.completed) {
+    throw new Error("Cannot pause a completed todo");
+  }
+
+  await todos.updateOne(
+    { _id: existing._id },
+    { $set: { status: 'paused', pausedAt: new Date() } }
+  );
+
+  return await todos.findOne({ _id: existing._id });
+}
+
+async function handleResume(existing: Todo, todos: any): Promise<Todo> {
+  const currentStatus = existing.status || 'active';
+
+  if (currentStatus !== 'paused') {
+    throw new Error("Todo is not paused");
+  }
+
+  const pausedAt = existing.pausedAt?.getTime() || Date.now();
+  const pausedDuration = Date.now() - pausedAt;
+  const newTotalPausedTime = (existing.totalPausedTime || 0) + pausedDuration;
+
+  await todos.updateOne(
+    { _id: existing._id },
+    { $set: { status: 'active', pausedAt: null, totalPausedTime: newTotalPausedTime } }
+  );
+
+  return await todos.findOne({ _id: existing._id });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Authenticate
   const user = getUserFromRequest(req);
   if (!user) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -30,7 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "Invalid todo ID" });
   }
 
-  // Validate ObjectId format
   if (!ObjectId.isValid(id)) {
     return res.status(400).json({ error: "Invalid todo ID format" });
   }
@@ -39,7 +76,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const todos = db.collection<Todo>("todos");
 
   try {
-    // Check ownership
     const existing = await todos.findOne({
       _id: new ObjectId(id),
       userId: user.userId,
@@ -47,6 +83,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!existing) {
       return res.status(404).json({ error: "Todo not found" });
+    }
+
+    // POST - Handle actions (pause, resume)
+    if (req.method === "POST") {
+      const { action } = req.body;
+      
+      if (!action) {
+        return res.status(400).json({ error: "Action is required" });
+      }
+
+      try {
+        let updated: Todo;
+        
+        switch (action) {
+          case 'pause':
+            updated = await handlePause(existing, todos);
+            break;
+          case 'resume':
+            updated = await handleResume(existing, todos);
+            break;
+          default:
+            return res.status(400).json({ error: `Unknown action: ${action}` });
+        }
+        
+        return res.json(formatTodo(updated));
+      } catch (err: any) {
+        return res.status(400).json({ error: err.message });
+      }
     }
 
     // PATCH - Update todo
@@ -60,7 +124,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (typeof completed === "boolean") {
-        // Prevent completing a paused task - must resume first
         if (completed && currentStatus === 'paused') {
           return res.status(400).json({ error: "Cannot complete a paused task. Resume it first." });
         }
@@ -68,11 +131,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updates.completed = completed;
         
         if (completed) {
-          // When completing, update status and completedAt
           updates.status = 'completed';
           updates.completedAt = new Date();
         } else {
-          // When uncompleting, reset status to active
           updates.status = 'active';
           updates.completedAt = null;
         }
@@ -101,4 +162,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
-
