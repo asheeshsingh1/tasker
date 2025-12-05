@@ -3,41 +3,58 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase, RecurringTask, RecurringFrequency } from "../_lib/mongodb.js";
 import { getUserFromRequest } from "../_lib/auth.js";
 
-// Get today's date as YYYY-MM-DD string
-function getTodayString(): string {
+// Get today's date as YYYY-MM-DD string (using client date if provided)
+function getTodayString(clientDate?: string): string {
+  if (clientDate && /^\d{4}-\d{2}-\d{2}$/.test(clientDate)) {
+    return clientDate;
+  }
   const today = new Date();
   return today.toISOString().split('T')[0];
 }
 
-// Check if today is a valid day for this recurring task
-function isTodayScheduled(task: RecurringTask): boolean {
+// Parse client date to get day of week and day of month
+function parseClientDate(clientDate?: string): { dayOfWeek: number; dayOfMonth: number } {
+  if (clientDate && /^\d{4}-\d{2}-\d{2}$/.test(clientDate)) {
+    // Parse the date string directly to avoid timezone issues
+    const [year, month, day] = clientDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month is 0-indexed
+    return {
+      dayOfWeek: date.getDay(),
+      dayOfMonth: day,
+    };
+  }
   const now = new Date();
-  const today = now.getDay(); // 0-6, Sunday = 0
-  const todayDate = now.getDate(); // 1-31
+  return {
+    dayOfWeek: now.getDay(),
+    dayOfMonth: now.getDate(),
+  };
+}
+
+// Check if today is a valid day for this recurring task
+function isTodayScheduled(task: RecurringTask, clientDate?: string): boolean {
+  const { dayOfWeek, dayOfMonth } = parseClientDate(clientDate);
 
   switch (task.frequency) {
     case 'daily':
       return true;
     case 'weekly':
-      return task.dayOfWeek === today;
+      return task.dayOfWeek === dayOfWeek;
     case 'monthly':
-      return task.dayOfMonth === todayDate;
+      return task.dayOfMonth === dayOfMonth;
     default:
       return true;
   }
 }
 
 // Check if today is a valid day to complete this recurring task (with reason)
-function canCompleteToday(task: RecurringTask): { canComplete: boolean; reason?: string } {
-  const now = new Date();
-  const today = now.getDay();
-  const todayDate = now.getDate();
+function canCompleteToday(task: RecurringTask, clientDate?: string): { canComplete: boolean; reason?: string } {
+  const { dayOfWeek, dayOfMonth } = parseClientDate(clientDate);
 
   switch (task.frequency) {
     case 'daily':
       return { canComplete: true };
     case 'weekly':
-      if (task.dayOfWeek === today) {
+      if (task.dayOfWeek === dayOfWeek) {
         return { canComplete: true };
       }
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -46,7 +63,7 @@ function canCompleteToday(task: RecurringTask): { canComplete: boolean; reason?:
         reason: `This task can only be completed on ${dayNames[task.dayOfWeek ?? 0]}` 
       };
     case 'monthly':
-      if (task.dayOfMonth === todayDate) {
+      if (task.dayOfMonth === dayOfMonth) {
         return { canComplete: true };
       }
       return { 
@@ -128,12 +145,12 @@ function calculateNextDue(
 }
 
 // Action handlers
-async function handleStart(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
-  if (!isTodayScheduled(existing)) {
+async function handleStart(existing: RecurringTask, recurringTasks: any, clientDate?: string): Promise<RecurringTask> {
+  if (!isTodayScheduled(existing, clientDate)) {
     throw new Error("Today is not a scheduled day for this task");
   }
 
-  const todayStr = getTodayString();
+  const todayStr = getTodayString(clientDate);
   const completions = existing.completions || [];
   const existingCompletion = completions.find(c => c.scheduledDate === todayStr);
 
@@ -177,12 +194,12 @@ async function handleStart(existing: RecurringTask, recurringTasks: any): Promis
   return await recurringTasks.findOne({ _id: existing._id });
 }
 
-async function handlePause(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
-  if (!isTodayScheduled(existing)) {
+async function handlePause(existing: RecurringTask, recurringTasks: any, clientDate?: string): Promise<RecurringTask> {
+  if (!isTodayScheduled(existing, clientDate)) {
     throw new Error("Today is not a scheduled day for this task");
   }
 
-  const todayStr = getTodayString();
+  const todayStr = getTodayString(clientDate);
   const completions = existing.completions || [];
   const existingCompletion = completions.find(c => c.scheduledDate === todayStr);
 
@@ -214,8 +231,8 @@ async function handlePause(existing: RecurringTask, recurringTasks: any): Promis
   return await recurringTasks.findOne({ _id: existing._id });
 }
 
-async function handleResume(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
-  const todayStr = getTodayString();
+async function handleResume(existing: RecurringTask, recurringTasks: any, clientDate?: string): Promise<RecurringTask> {
+  const todayStr = getTodayString(clientDate);
   const completions = existing.completions || [];
   const existingIndex = completions.findIndex(c => c.scheduledDate === todayStr);
   const existingCompletion = existingIndex >= 0 ? completions[existingIndex] : null;
@@ -245,17 +262,17 @@ async function handleResume(existing: RecurringTask, recurringTasks: any): Promi
   return await recurringTasks.findOne({ _id: existing._id });
 }
 
-async function handleComplete(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
+async function handleComplete(existing: RecurringTask, recurringTasks: any, clientDate?: string): Promise<RecurringTask> {
   if (!existing.isActive) {
     throw new Error("Cannot complete an inactive recurring task");
   }
 
-  const { canComplete, reason } = canCompleteToday(existing);
+  const { canComplete, reason } = canCompleteToday(existing, clientDate);
   if (!canComplete) {
     throw new Error(reason);
   }
 
-  const todayStr = getTodayString();
+  const todayStr = getTodayString(clientDate);
   const completions = existing.completions || [];
   const existingCompletion = completions.find(c => c.scheduledDate === todayStr);
 
@@ -299,8 +316,8 @@ async function handleComplete(existing: RecurringTask, recurringTasks: any): Pro
   return await recurringTasks.findOne({ _id: existing._id });
 }
 
-async function handleUncomplete(existing: RecurringTask, recurringTasks: any): Promise<RecurringTask> {
-  const todayStr = getTodayString();
+async function handleUncomplete(existing: RecurringTask, recurringTasks: any, clientDate?: string): Promise<RecurringTask> {
+  const todayStr = getTodayString(clientDate);
   const completions = existing.completions || [];
   const existingIndex = completions.findIndex(c => c.scheduledDate === todayStr);
   const existingCompletion = existingIndex >= 0 ? completions[existingIndex] : null;
@@ -362,7 +379,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // POST - Handle actions (start, pause, resume, complete, uncomplete)
     if (req.method === "POST") {
-      const { action } = req.body;
+      const { action, clientDate } = req.body;
       
       if (!action) {
         return res.status(400).json({ error: "Action is required" });
@@ -373,19 +390,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         switch (action) {
           case 'start':
-            updated = await handleStart(existing, recurringTasks);
+            updated = await handleStart(existing, recurringTasks, clientDate);
             break;
           case 'pause':
-            updated = await handlePause(existing, recurringTasks);
+            updated = await handlePause(existing, recurringTasks, clientDate);
             break;
           case 'resume':
-            updated = await handleResume(existing, recurringTasks);
+            updated = await handleResume(existing, recurringTasks, clientDate);
             break;
           case 'complete':
-            updated = await handleComplete(existing, recurringTasks);
+            updated = await handleComplete(existing, recurringTasks, clientDate);
             break;
           case 'uncomplete':
-            updated = await handleUncomplete(existing, recurringTasks);
+            updated = await handleUncomplete(existing, recurringTasks, clientDate);
             break;
           default:
             return res.status(400).json({ error: `Unknown action: ${action}` });

@@ -192,30 +192,39 @@ export const recurring = {
   complete: (id: number) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
-      body: JSON.stringify({ action: 'complete' }),
+      body: JSON.stringify({ action: 'complete', clientDate: getLocalDateString() }),
     }),
 
   uncomplete: (id: number) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
-      body: JSON.stringify({ action: 'uncomplete' }),
+      body: JSON.stringify({ action: 'uncomplete', clientDate: getLocalDateString() }),
     }),
 
   start: (id: number) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
-      body: JSON.stringify({ action: 'start' }),
+      body: JSON.stringify({ action: 'start', clientDate: getLocalDateString() }),
     }),
 
   pause: (id: number) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
-      body: JSON.stringify({ action: 'pause' }),
+      body: JSON.stringify({ action: 'pause', clientDate: getLocalDateString() }),
     }),
 
   resume: (id: number) =>
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
-      body: JSON.stringify({ action: 'resume' }),
+      body: JSON.stringify({ action: 'resume', clientDate: getLocalDateString() }),
     }),
 };
+
+// Helper to get client's local date as YYYY-MM-DD
+function getLocalDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
