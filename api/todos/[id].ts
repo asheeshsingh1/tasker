@@ -3,6 +3,21 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase, Todo } from "../_lib/mongodb.js";
 import { getUserFromRequest } from "../_lib/auth.js";
 
+// Helper to format todo for response
+function formatTodo(t: Todo) {
+  return {
+    id: t._id!.toString(),
+    text: t.text,
+    completed: t.completed,
+    status: t.status || (t.completed ? 'completed' : 'active'),
+    createdAt: t.createdAt.toISOString(),
+    pausedAt: t.pausedAt?.toISOString() || null,
+    totalPausedTime: t.totalPausedTime || 0,
+    completedAt: t.completedAt?.toISOString() || null,
+    recurringTaskId: t.recurringTaskId || null,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Authenticate
   const user = getUserFromRequest(req);
@@ -38,15 +53,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "PATCH") {
       const { text, completed } = req.body;
       const updates: Partial<Todo> = {};
+      const currentStatus = existing.status || (existing.completed ? 'completed' : 'active');
 
       if (typeof text === "string") {
         updates.text = text.trim();
       }
 
       if (typeof completed === "boolean") {
+        // Prevent completing a paused task - must resume first
+        if (completed && currentStatus === 'paused') {
+          return res.status(400).json({ error: "Cannot complete a paused task. Resume it first." });
+        }
+        
         updates.completed = completed;
-        // Set completedAt when marking as complete, null when unmarking
-        updates.completedAt = completed ? new Date() : null;
+        
+        if (completed) {
+          // When completing, update status and completedAt
+          updates.status = 'completed';
+          updates.completedAt = new Date();
+        } else {
+          // When uncompleting, reset status to active
+          updates.status = 'active';
+          updates.completedAt = null;
+        }
       }
 
       if (Object.keys(updates).length === 0) {
@@ -57,13 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const updated = await todos.findOne({ _id: new ObjectId(id) });
 
-      return res.json({
-        id: updated!._id!.toString(),
-        text: updated!.text,
-        completed: updated!.completed,
-        createdAt: updated!.createdAt.toISOString(),
-        completedAt: updated!.completedAt?.toISOString() || null,
-      });
+      return res.json(formatTodo(updated!));
     }
 
     // DELETE - Delete single todo

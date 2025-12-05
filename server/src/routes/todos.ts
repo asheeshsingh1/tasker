@@ -29,6 +29,21 @@ function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
   }
 }
 
+// Helper to format todo for response
+function formatTodo(t: Todo) {
+  return {
+    id: t.id,
+    text: t.text,
+    completed: Boolean(t.completed),
+    status: t.status || (t.completed ? 'completed' : 'active'),
+    createdAt: t.created_at,
+    pausedAt: t.paused_at,
+    totalPausedTime: t.total_paused_time || 0,
+    completedAt: t.completed_at,
+    recurringTaskId: t.recurring_task_id,
+  };
+}
+
 // Apply auth middleware to all routes
 router.use(authenticate);
 
@@ -39,15 +54,7 @@ router.get("/", (req: AuthRequest, res: Response) => {
       .prepare("SELECT * FROM todos WHERE user_id = ? ORDER BY created_at DESC")
       .all(req.userId) as Todo[];
 
-    // Convert SQLite integers to booleans
-    const formatted = todos.map((t) => ({
-      id: t.id,
-      text: t.text,
-      completed: Boolean(t.completed),
-      createdAt: t.created_at,
-    }));
-
-    res.json(formatted);
+    res.json(todos.map(formatTodo));
   } catch (error) {
     console.error("Get todos error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -57,7 +64,7 @@ router.get("/", (req: AuthRequest, res: Response) => {
 // Create todo
 router.post("/", (req: AuthRequest, res: Response) => {
   try {
-    const { text } = req.body;
+    const { text, recurringTaskId } = req.body;
 
     if (!text?.trim()) {
       res.status(400).json({ error: "Text is required" });
@@ -65,19 +72,85 @@ router.post("/", (req: AuthRequest, res: Response) => {
     }
 
     const result = db
-      .prepare("INSERT INTO todos (user_id, text) VALUES (?, ?)")
-      .run(req.userId, text.trim());
+      .prepare("INSERT INTO todos (user_id, text, status, recurring_task_id) VALUES (?, ?, 'active', ?)")
+      .run(req.userId, text.trim(), recurringTaskId || null);
 
     const todo = db.prepare("SELECT * FROM todos WHERE id = ?").get(result.lastInsertRowid) as Todo;
 
-    res.status(201).json({
-      id: todo.id,
-      text: todo.text,
-      completed: Boolean(todo.completed),
-      createdAt: todo.created_at,
-    });
+    res.status(201).json(formatTodo(todo));
   } catch (error) {
     console.error("Create todo error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Pause a todo
+router.post("/:id/pause", (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const existing = db
+      .prepare("SELECT * FROM todos WHERE id = ? AND user_id = ?")
+      .get(id, req.userId) as Todo | undefined;
+
+    if (!existing) {
+      res.status(404).json({ error: "Todo not found" });
+      return;
+    }
+
+    if (existing.status === 'paused') {
+      res.status(400).json({ error: "Todo is already paused" });
+      return;
+    }
+
+    if (existing.status === 'completed' || existing.completed) {
+      res.status(400).json({ error: "Cannot pause a completed todo" });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    db.prepare("UPDATE todos SET status = 'paused', paused_at = ? WHERE id = ?").run(now, id);
+
+    const updated = db.prepare("SELECT * FROM todos WHERE id = ?").get(id) as Todo;
+    res.json(formatTodo(updated));
+  } catch (error) {
+    console.error("Pause todo error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Resume a todo
+router.post("/:id/resume", (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const existing = db
+      .prepare("SELECT * FROM todos WHERE id = ? AND user_id = ?")
+      .get(id, req.userId) as Todo | undefined;
+
+    if (!existing) {
+      res.status(404).json({ error: "Todo not found" });
+      return;
+    }
+
+    if (existing.status !== 'paused') {
+      res.status(400).json({ error: "Todo is not paused" });
+      return;
+    }
+
+    // Calculate paused duration and add to total
+    const pausedAt = new Date(existing.paused_at!).getTime();
+    const now = Date.now();
+    const pausedDuration = now - pausedAt;
+    const newTotalPausedTime = (existing.total_paused_time || 0) + pausedDuration;
+
+    db.prepare("UPDATE todos SET status = 'active', paused_at = NULL, total_paused_time = ? WHERE id = ?")
+      .run(newTotalPausedTime, id);
+
+    const updated = db.prepare("SELECT * FROM todos WHERE id = ?").get(id) as Todo;
+    res.json(formatTodo(updated));
+  } catch (error) {
+    console.error("Resume todo error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -100,7 +173,7 @@ router.patch("/:id", (req: AuthRequest, res: Response) => {
 
     // Build update query dynamically
     const updates: string[] = [];
-    const values: (string | number)[] = [];
+    const values: (string | number | null)[] = [];
 
     if (typeof text === "string") {
       updates.push("text = ?");
@@ -110,6 +183,27 @@ router.patch("/:id", (req: AuthRequest, res: Response) => {
     if (typeof completed === "boolean") {
       updates.push("completed = ?");
       values.push(completed ? 1 : 0);
+      
+      if (completed) {
+        // When completing, also update status and completed_at
+        updates.push("status = 'completed'");
+        updates.push("completed_at = ?");
+        values.push(new Date().toISOString());
+        
+        // If was paused, add remaining paused time
+        if (existing.status === 'paused' && existing.paused_at) {
+          const pausedAt = new Date(existing.paused_at).getTime();
+          const pausedDuration = Date.now() - pausedAt;
+          const newTotalPausedTime = (existing.total_paused_time || 0) + pausedDuration;
+          updates.push("total_paused_time = ?");
+          values.push(newTotalPausedTime);
+          updates.push("paused_at = NULL");
+        }
+      } else {
+        // When uncompleting, reset status to active
+        updates.push("status = 'active'");
+        updates.push("completed_at = NULL");
+      }
     }
 
     if (updates.length === 0) {
@@ -123,12 +217,7 @@ router.patch("/:id", (req: AuthRequest, res: Response) => {
 
     const updated = db.prepare("SELECT * FROM todos WHERE id = ?").get(id) as Todo;
 
-    res.json({
-      id: updated.id,
-      text: updated.text,
-      completed: Boolean(updated.completed),
-      createdAt: updated.created_at,
-    });
+    res.json(formatTodo(updated));
   } catch (error) {
     console.error("Update todo error:", error);
     res.status(500).json({ error: "Internal server error" });

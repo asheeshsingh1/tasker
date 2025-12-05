@@ -50,14 +50,51 @@ export interface User {
   createdAt: Date;
 }
 
+// Todo status type
+export type TodoStatus = 'active' | 'paused' | 'completed';
+
 // Todo type
 export interface Todo {
   _id?: ObjectId;
   userId: string;
   text: string;
   completed: boolean;
+  status: TodoStatus;
   createdAt: Date;
+  pausedAt: Date | null;
+  totalPausedTime: number; // milliseconds
   completedAt: Date | null;
+  recurringTaskId: string | null;
+}
+
+// Recurring task frequency type
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'custom';
+
+// Completion record for recurring tasks
+export interface CompletionRecord {
+  scheduledDate: string; // ISO date string (YYYY-MM-DD)
+  completedAt: Date | null;
+  status: 'completed' | 'missed' | 'pending' | 'paused' | 'in_progress';
+  startedAt: Date | null; // when user clicked "Start"
+  pausedAt: Date | null;
+  totalPausedTime: number; // milliseconds
+  timeTaken: number | null; // milliseconds - completedAt - startedAt - totalPausedTime
+}
+
+// Recurring task type
+export interface RecurringTask {
+  _id?: ObjectId;
+  userId: string;
+  text: string;
+  frequency: RecurringFrequency;
+  customDays: number | null;
+  dayOfWeek: number | null; // 0-6, Sunday = 0
+  dayOfMonth: number | null; // 1-31
+  nextDue: Date;
+  lastGenerated: Date | null;
+  isActive: boolean;
+  createdAt: Date;
+  completions: CompletionRecord[]; // History of completions
 }
 
 // Re-export ObjectId for convenience

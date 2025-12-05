@@ -1,7 +1,21 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { ObjectId } from "mongodb";
 import { connectToDatabase, Todo } from "../_lib/mongodb.js";
 import { getUserFromRequest } from "../_lib/auth.js";
+
+// Helper to format todo for response
+function formatTodo(t: Todo) {
+  return {
+    id: t._id!.toString(),
+    text: t.text,
+    completed: t.completed,
+    status: t.status || (t.completed ? 'completed' : 'active'),
+    createdAt: t.createdAt.toISOString(),
+    pausedAt: t.pausedAt?.toISOString() || null,
+    totalPausedTime: t.totalPausedTime || 0,
+    completedAt: t.completedAt?.toISOString() || null,
+    recurringTaskId: t.recurringTaskId || null,
+  };
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Authenticate
@@ -21,20 +35,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .sort({ createdAt: -1 })
         .toArray();
 
-      const formatted = userTodos.map((t) => ({
-        id: t._id!.toString(),
-        text: t.text,
-        completed: t.completed,
-        createdAt: t.createdAt.toISOString(),
-        completedAt: t.completedAt?.toISOString() || null,
-      }));
-
-      return res.json(formatted);
+      return res.json(userTodos.map(formatTodo));
     }
 
     // POST - Create new todo
     if (req.method === "POST") {
-      const { text } = req.body;
+      const { text, recurringTaskId } = req.body;
 
       if (!text?.trim()) {
         return res.status(400).json({ error: "Text is required" });
@@ -44,19 +50,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         userId: user.userId,
         text: text.trim(),
         completed: false,
+        status: 'active',
         createdAt: new Date(),
+        pausedAt: null,
+        totalPausedTime: 0,
         completedAt: null,
+        recurringTaskId: recurringTaskId || null,
       });
 
       const newTodo = await todos.findOne({ _id: result.insertedId });
 
-      return res.status(201).json({
-        id: newTodo!._id!.toString(),
-        text: newTodo!.text,
-        completed: newTodo!.completed,
-        createdAt: newTodo!.createdAt.toISOString(),
-        completedAt: newTodo!.completedAt?.toISOString() || null,
-      });
+      return res.status(201).json(formatTodo(newTodo!));
     }
 
     // DELETE - Clear all completed todos for user

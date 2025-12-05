@@ -43,13 +43,38 @@ export interface User {
   createdAt: Date;
 }
 
+// Todo status type
+export type TodoStatus = 'active' | 'paused' | 'completed';
+
 // Todo type
 export interface Todo {
   _id?: string;
   userId: string;
   text: string;
   completed: boolean;
+  status: TodoStatus;
   createdAt: Date;
+  pausedAt: Date | null;
+  totalPausedTime: number; // milliseconds
   completedAt: Date | null;
+  recurringTaskId: string | null;
+}
+
+// Recurring task frequency type
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'custom';
+
+// Recurring task type
+export interface RecurringTask {
+  _id?: string;
+  userId: string;
+  text: string;
+  frequency: RecurringFrequency;
+  customDays: number | null;
+  dayOfWeek: number | null; // 0-6, Sunday = 0
+  dayOfMonth: number | null; // 1-31
+  nextDue: Date;
+  lastGenerated: Date | null;
+  isActive: boolean;
+  createdAt: Date;
 }
 
