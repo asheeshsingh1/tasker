@@ -328,7 +328,11 @@ function getScheduledDates(task: RecurringTask, limit: number = 10): string[] {
     }
     
     if (isScheduled) {
-      dates.unshift(current.toISOString().split('T')[0]); // Newest first
+      // Use local date format to avoid timezone issues
+      const year = current.getFullYear();
+      const month = String(current.getMonth() + 1).padStart(2, '0');
+      const day = String(current.getDate()).padStart(2, '0');
+      dates.unshift(`${year}-${month}-${day}`); // Newest first
     }
     
     current.setDate(current.getDate() + 1);
@@ -1581,8 +1585,11 @@ function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, o
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     
+    // Use local date format for yesterday
+    const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+    
     if (dateStr === todayStr) return 'Today';
-    if (dateStr === yesterday.toISOString().split('T')[0]) return 'Yesterday';
+    if (dateStr === yesterdayStr) return 'Yesterday';
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
   
@@ -1596,7 +1603,7 @@ function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, o
   
   // Get history with completion data - use actual completions from database
   const getHistoryItems = () => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayString();
     
     // Sort completions by date (newest first) and limit to 100
     const sortedCompletions = [...completions]

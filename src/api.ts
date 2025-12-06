@@ -169,7 +169,7 @@ export interface GenerateResult {
 }
 
 export const recurring = {
-  list: () => request<RecurringTask[]>("/recurring"),
+  list: () => request<RecurringTask[]>(`/recurring?clientDate=${getLocalDateString()}`),
 
   create: (data: CreateRecurringTaskData) =>
     request<RecurringTask>("/recurring", {

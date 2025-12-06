@@ -93,15 +93,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .toArray();
 
       // Mark incomplete past tasks as "missed"
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayStr = today.toISOString().split('T')[0];
+      // Use clientDate from query if provided (for timezone support)
+      const clientDate = req.query.clientDate as string | undefined;
+      let todayStr: string;
+      
+      if (clientDate && /^\d{4}-\d{2}-\d{2}$/.test(clientDate)) {
+        todayStr = clientDate;
+      } else {
+        const today = new Date();
+        todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      }
 
       for (const task of tasks) {
         if (task.completions && task.completions.length > 0) {
           let needsUpdate = false;
           const updatedCompletions = task.completions.map(completion => {
-            const completionDateStr = new Date(completion.scheduledDate).toISOString().split('T')[0];
+            // scheduledDate is already in YYYY-MM-DD format, no conversion needed
+            const completionDateStr = completion.scheduledDate;
             // If it's a past date and status is not 'completed' or 'missed', mark as 'missed'
             if (completionDateStr < todayStr && completion.status !== 'completed' && completion.status !== 'missed') {
               needsUpdate = true;

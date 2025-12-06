@@ -8,8 +8,9 @@ function getTodayString(clientDate?: string): string {
   if (clientDate && /^\d{4}-\d{2}-\d{2}$/.test(clientDate)) {
     return clientDate;
   }
+  // Fallback to server's local date (should rarely be used since client always sends date)
   const today = new Date();
-  return today.toISOString().split('T')[0];
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 }
 
 // Parse client date to get day of week and day of month

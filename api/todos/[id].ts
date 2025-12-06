@@ -134,6 +134,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updates.status = 'completed';
           updates.completedAt = new Date();
         } else {
+          // When uncompleting, add the time spent in "completed" state to totalPausedTime
+          // This ensures that time between complete → uncomplete → complete is not counted
+          if (existing.completedAt) {
+            const now = new Date();
+            const completedAt = new Date(existing.completedAt);
+            const timeInCompletedState = now.getTime() - completedAt.getTime();
+            updates.totalPausedTime = (existing.totalPausedTime || 0) + timeInCompletedState;
+          }
           updates.status = 'active';
           updates.completedAt = null;
         }
