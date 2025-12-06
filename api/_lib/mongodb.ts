@@ -97,6 +97,25 @@ export interface RecurringTask {
   completions: CompletionRecord[]; // History of completions
 }
 
+// OTP verification type
+export interface OtpVerification {
+  _id?: ObjectId;
+  email: string;
+  otp: string;
+  expiresAt: Date;
+  verified: boolean;
+  createdAt: Date;
+}
+
+// Rate limit tracking type
+export interface RateLimitRecord {
+  _id?: ObjectId;
+  key: string; // IP address or "global_daily"
+  count: number;
+  windowStart: Date;
+  expiresAt: Date;
+}
+
 // Re-export ObjectId for convenience
 export { ObjectId };
 

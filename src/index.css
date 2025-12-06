@@ -722,6 +722,56 @@ body {
   border: 1px solid rgba(214, 69, 69, 0.2);
 }
 
+.auth-success {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4CAF50;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(76, 175, 80, 0.2);
+}
+
+.otp-info {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(199, 93, 58, 0.05);
+  border-radius: var(--radius-sm);
+}
+
+.otp-info p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.otp-info .otp-email {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 0.25rem;
+}
+
+.otp-input {
+  text-align: center;
+  font-size: 1.5rem !important;
+  letter-spacing: 0.5rem;
+  font-weight: 600;
+}
+
+.otp-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+
+.otp-divider {
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
 .auth-switch {
   text-align: center;
   margin-top: 1.5rem;

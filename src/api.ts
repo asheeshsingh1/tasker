@@ -53,7 +53,24 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface SendOtpResponse {
+  message: string;
+  email: string;
+}
+
 export const auth = {
+  sendOtp: (email: string) =>
+    request<SendOtpResponse>("/auth/send-otp", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  verifyOtp: (email: string, otp: string, password: string, name: string) =>
+    request<AuthResponse>("/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({ email, otp, password, name }),
+    }),
+
   register: (email: string, password: string, name: string) =>
     request<AuthResponse>("/auth/register", {
       method: "POST",

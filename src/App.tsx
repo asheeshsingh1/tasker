@@ -53,19 +53,63 @@ function AuthForm({ onAuth }: AuthFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
 
-  const handleSubmit = async (e: FormEvent) => {
+  // Countdown timer for resend
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendTimer]);
+
+  const handleSendOtp = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    try {
+      await auth.sendOtp(email);
+      setOtpSent(true);
+      setResendTimer(360);
+      setSuccess("Verification code sent to your email!");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send verification code");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    try {
+      const result = await auth.verifyOtp(email, otp, password, name);
+      setToken(result.token);
+      onAuth(result.user);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to verify code");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
     setSubmitting(true);
 
     try {
-      const result = isLogin
-        ? await auth.login(email, password)
-        : await auth.register(email, password, name);
-      
+      const result = await auth.login(email, password);
       setToken(result.token);
       onAuth(result.user);
     } catch (err) {
@@ -75,17 +119,159 @@ function AuthForm({ onAuth }: AuthFormProps) {
     }
   };
 
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    try {
+      await auth.sendOtp(email);
+      setResendTimer(300);
+      setSuccess("New verification code sent!");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resend code");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const switchMode = () => {
+    setIsLogin(!isLogin);
+    setError("");
+    setSuccess("");
+    setOtpSent(false);
+    setOtp("");
+  };
+
+  const goBackToForm = () => {
+    setOtpSent(false);
+    setOtp("");
+    setError("");
+    setSuccess("");
+  };
+
+  // Login form
+  if (isLogin) {
   return (
     <div className="app auth-app">
       <header className="app-header">
         <h1 className="app-title">Tasker</h1>
-        <p className="app-subtitle">
-          {isLogin ? "Welcome back" : "Create your account"}
-        </p>
+          <p className="app-subtitle">Welcome back</p>
+        </header>
+
+        <form className="auth-form" onSubmit={handleLogin}>
+          <div className="form-group">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              className="task-input"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              className="task-input"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+          </div>
+
+          {error && <div className="auth-error">{error}</div>}
+
+          <button type="submit" className="add-btn auth-btn" disabled={submitting}>
+            {submitting ? "Please wait..." : "Sign In"}
+          </button>
+
+          <p className="auth-switch">
+            Don't have an account?{" "}
+            <button type="button" className="auth-switch-btn" onClick={switchMode}>
+              Sign up
+            </button>
+          </p>
+        </form>
+      </div>
+    );
+  }
+
+  // Registration - OTP verification step
+  if (otpSent) {
+    return (
+      <div className="app auth-app">
+        <header className="app-header">
+          <h1 className="app-title">Tasker</h1>
+          <p className="app-subtitle">Verify your email</p>
       </header>
 
-      <form className="auth-form" onSubmit={handleSubmit}>
-        {!isLogin && (
+        <form className="auth-form" onSubmit={handleVerifyOtp}>
+          <div className="otp-info">
+            <p>We sent a verification code to</p>
+            <p className="otp-email">{email}</p>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="otp">Verification Code</label>
+            <input
+              id="otp"
+              type="text"
+              className="task-input otp-input"
+              placeholder="Enter 6-digit code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              required
+              maxLength={6}
+              autoComplete="one-time-code"
+            />
+          </div>
+
+          {error && <div className="auth-error">{error}</div>}
+          {success && <div className="auth-success">{success}</div>}
+
+          <button type="submit" className="add-btn auth-btn" disabled={submitting || otp.length !== 6}>
+            {submitting ? "Verifying..." : "Verify & Create Account"}
+          </button>
+
+          <div className="otp-actions">
+            <button
+              type="button"
+              className="auth-switch-btn"
+              onClick={handleResendOtp}
+              disabled={resendTimer > 0 || submitting}
+            >
+              {resendTimer > 0 
+                ? `Resend code in ${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, '0')}` 
+                : "Resend code"}
+            </button>
+            <span className="otp-divider">•</span>
+            <button type="button" className="auth-switch-btn" onClick={goBackToForm}>
+              Change email
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // Registration - Initial form
+  return (
+    <div className="app auth-app">
+      <header className="app-header">
+        <h1 className="app-title">Tasker</h1>
+        <p className="app-subtitle">Create your account</p>
+      </header>
+
+      <form className="auth-form" onSubmit={handleSendOtp}>
           <div className="form-group">
             <label htmlFor="name">Name</label>
             <input
@@ -95,10 +281,10 @@ function AuthForm({ onAuth }: AuthFormProps) {
               placeholder="Your name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              required={!isLogin}
+            required
+            minLength={2}
             />
           </div>
-        )}
 
         <div className="form-group">
           <label htmlFor="email">Email</label>
@@ -130,20 +316,13 @@ function AuthForm({ onAuth }: AuthFormProps) {
         {error && <div className="auth-error">{error}</div>}
 
         <button type="submit" className="add-btn auth-btn" disabled={submitting}>
-          {submitting ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
+          {submitting ? "Sending code..." : "Send Verification Code"}
         </button>
 
         <p className="auth-switch">
-          {isLogin ? "Don't have an account? " : "Already have an account? "}
-          <button
-            type="button"
-            className="auth-switch-btn"
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError("");
-            }}
-          >
-            {isLogin ? "Sign up" : "Sign in"}
+          Already have an account?{" "}
+          <button type="button" className="auth-switch-btn" onClick={switchMode}>
+            Sign in
           </button>
         </p>
       </form>
