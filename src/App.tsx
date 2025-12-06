@@ -893,6 +893,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
 
   const editRecurringTask = async (id: string, data: { text?: string; frequency?: RecurringFrequency; dayOfWeek?: number; dayOfMonth?: number }) => {
     try {
+      // Get the existing task to preserve its decrypted text if not updating text
+      const existingTask = recurringTasks.find((t) => t.id === id);
+      
       // Encrypt the task text if it's being updated
       const encryptedData = { ...data };
       const originalText = data.text;
@@ -901,7 +904,11 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
       }
       const updated = await recurring.update(id, encryptedData);
       // Store locally with decrypted text for display
-      const displayTask = originalText ? { ...updated, text: originalText } : updated;
+      // If text was updated, use the new text; otherwise preserve the existing decrypted text
+      const displayTask = { 
+        ...updated, 
+        text: originalText || existingTask?.text || updated.text 
+      };
       setRecurringTasks(recurringTasks.map((t) => (t.id === id ? displayTask : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update recurring task");

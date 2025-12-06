@@ -193,7 +193,7 @@ export const recurring = {
   update: (id: string, data: UpdateRecurringTaskData) =>
     request<RecurringTask>(`/recurring/${id}`, {
       method: "PATCH",
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, clientDate: getLocalDateString() }),
     }),
 
   delete: (id: string) =>

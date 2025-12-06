@@ -417,7 +417,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // PATCH - Update recurring task
     if (req.method === "PATCH") {
-      const { text, frequency, customDays, dayOfWeek, dayOfMonth, isActive } = req.body;
+      const { text, frequency, customDays, dayOfWeek, dayOfMonth, isActive, clientDate } = req.body;
       const updates: Partial<RecurringTask> = {};
 
       if (typeof text === "string") {
@@ -460,6 +460,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (needsRecalculation) {
         updates.nextDue = calculateNextDue(newFrequency, newCustomDays, newDayOfWeek, newDayOfMonth);
+        
+        // Check if today is still a scheduled day with the new frequency
+        // If not, remove any incomplete completion record for today
+        const todayStr = getTodayString(clientDate);
+        const newTaskSchedule: RecurringTask = {
+          ...existing,
+          frequency: newFrequency,
+          customDays: newCustomDays,
+          dayOfWeek: newDayOfWeek,
+          dayOfMonth: newDayOfMonth,
+        };
+        
+        const isTodayStillScheduled = isTodayScheduled(newTaskSchedule, clientDate);
+        
+        if (!isTodayStillScheduled) {
+          // Remove any incomplete completion record for today (pending, in_progress, paused)
+          const completions = existing.completions || [];
+          const todayCompletionIndex = completions.findIndex(c => c.scheduledDate === todayStr);
+          
+          if (todayCompletionIndex >= 0) {
+            const todayCompletion = completions[todayCompletionIndex];
+            // Only remove if it's not completed (we want to preserve completed records)
+            if (todayCompletion.status !== 'completed') {
+              completions.splice(todayCompletionIndex, 1);
+              updates.completions = completions;
+            }
+          }
+        }
       }
 
       if (Object.keys(updates).length === 0) {
