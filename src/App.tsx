@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, type ChangeEvent, type KeyboardEvent, type FormEvent } from "react";
+import { useState, useEffect, useMemo, useRef, type ChangeEvent, type KeyboardEvent, type FormEvent } from "react";
 import { auth, todos, recurring, setToken, type User, type Todo, type RecurringTask, type RecurringFrequency, type CompletionRecord } from "./api";
+import { initializeEncryption, clearEncryption, encryptText, decryptTasks, isEncryptionReady } from "./crypto";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -23,6 +24,7 @@ function App() {
   const handleLogout = () => {
     setToken(null);
     setUser(null);
+    clearEncryption();
   };
 
   if (loading) {
@@ -95,6 +97,8 @@ function AuthForm({ onAuth }: AuthFormProps) {
     try {
       const result = await auth.verifyOtp(email, otp, password, name);
       setToken(result.token);
+      // Initialize encryption with password and salt
+      await initializeEncryption(password, result.encryptionSalt);
       onAuth(result.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to verify code");
@@ -111,6 +115,8 @@ function AuthForm({ onAuth }: AuthFormProps) {
     try {
       const result = await auth.login(email, password);
       setToken(result.token);
+      // Initialize encryption with password and salt
+      await initializeEncryption(password, result.encryptionSalt);
       onAuth(result.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -578,8 +584,12 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
           recurring.list(),
         ]);
         
-        setTodoList(todosData);
-        setRecurringTasks(recurringData);
+        // Decrypt task texts if encryption is ready
+        const decryptedTodos = await decryptTasks(todosData);
+        const decryptedRecurring = await decryptTasks(recurringData);
+        
+        setTodoList(decryptedTodos);
+        setRecurringTasks(decryptedRecurring);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load data");
       } finally {
@@ -725,8 +735,11 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     if (trimmed === "") return;
 
     try {
-      const newTodo = await todos.create(trimmed);
-      setTodoList([newTodo, ...todoList]);
+      // Encrypt the task text before sending to server
+      const encryptedText = isEncryptionReady() ? await encryptText(trimmed) : trimmed;
+      const newTodo = await todos.create(encryptedText);
+      // Store locally with decrypted text for display
+      setTodoList([{ ...newTodo, text: trimmed }, ...todoList]);
     setTask("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add task");
@@ -739,7 +752,8 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
 
     try {
       const updated = await todos.update(id, { completed: !todo.completed });
-      setTodoList(todoList.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      setTodoList(todoList.map((t) => (t.id === id ? { ...updated, text: todo.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update task");
     }
@@ -747,8 +761,11 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
 
   const editTask = async (id: string, text: string) => {
     try {
-      const updated = await todos.update(id, { text });
-      setTodoList(todoList.map((t) => (t.id === id ? updated : t)));
+      // Encrypt the task text before sending to server
+      const encryptedText = isEncryptionReady() ? await encryptText(text) : text;
+      const updated = await todos.update(id, { text: encryptedText });
+      // Store locally with decrypted text for display
+      setTodoList(todoList.map((t) => (t.id === id ? { ...updated, text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to edit task");
     }
@@ -757,7 +774,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const pauseTask = async (id: string) => {
     try {
       const updated = await todos.pause(id);
-      setTodoList(todoList.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      const existingTask = todoList.find((t) => t.id === id);
+      setTodoList(todoList.map((t) => (t.id === id ? { ...updated, text: existingTask?.text || updated.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to pause task");
     }
@@ -766,7 +785,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const resumeTask = async (id: string) => {
     try {
       const updated = await todos.resume(id);
-      setTodoList(todoList.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      const existingTask = todoList.find((t) => t.id === id);
+      setTodoList(todoList.map((t) => (t.id === id ? { ...updated, text: existingTask?.text || updated.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resume task");
     }
@@ -793,8 +814,11 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   // Recurring task functions
   const createRecurringTask = async (data: { text: string; frequency: RecurringFrequency; dayOfWeek?: number; dayOfMonth?: number }) => {
     try {
-      const newTask = await recurring.create(data);
-      setRecurringTasks([newTask, ...recurringTasks]);
+      // Encrypt the task text before sending to server
+      const encryptedText = isEncryptionReady() ? await encryptText(data.text) : data.text;
+      const newTask = await recurring.create({ ...data, text: encryptedText });
+      // Store locally with decrypted text for display
+      setRecurringTasks([{ ...newTask, text: data.text }, ...recurringTasks]);
       setShowRecurringForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create recurring task");
@@ -804,7 +828,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const toggleRecurringTask = async (id: string, isActive: boolean) => {
     try {
       const updated = await recurring.update(id, { isActive });
-      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      const existingTask = recurringTasks.find((t) => t.id === id);
+      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? { ...updated, text: existingTask?.text || updated.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update recurring task");
     }
@@ -813,7 +839,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const completeRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.complete(id);
-      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      const existingTask = recurringTasks.find((t) => t.id === id);
+      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? { ...updated, text: existingTask?.text || updated.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to complete recurring task");
     }
@@ -822,7 +850,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const uncompleteRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.uncomplete(id);
-      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      const existingTask = recurringTasks.find((t) => t.id === id);
+      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? { ...updated, text: existingTask?.text || updated.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to undo completion");
     }
@@ -831,7 +861,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const startRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.start(id);
-      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      const existingTask = recurringTasks.find((t) => t.id === id);
+      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? { ...updated, text: existingTask?.text || updated.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start recurring task");
     }
@@ -840,7 +872,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const pauseRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.pause(id);
-      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      const existingTask = recurringTasks.find((t) => t.id === id);
+      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? { ...updated, text: existingTask?.text || updated.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to pause recurring task");
     }
@@ -849,7 +883,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const resumeRecurringTask = async (id: string) => {
     try {
       const updated = await recurring.resume(id);
-      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
+      // Keep the decrypted text from current state
+      const existingTask = recurringTasks.find((t) => t.id === id);
+      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? { ...updated, text: existingTask?.text || updated.text } : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resume recurring task");
     }
@@ -857,8 +893,16 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
 
   const editRecurringTask = async (id: string, data: { text?: string; frequency?: RecurringFrequency; dayOfWeek?: number; dayOfMonth?: number }) => {
     try {
-      const updated = await recurring.update(id, data);
-      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? updated : t)));
+      // Encrypt the task text if it's being updated
+      const encryptedData = { ...data };
+      const originalText = data.text;
+      if (data.text && isEncryptionReady()) {
+        encryptedData.text = await encryptText(data.text);
+      }
+      const updated = await recurring.update(id, encryptedData);
+      // Store locally with decrypted text for display
+      const displayTask = originalText ? { ...updated, text: originalText } : updated;
+      setRecurringTasks(recurringTasks.map((t) => (t.id === id ? displayTask : t)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update recurring task");
     }
@@ -1450,6 +1494,19 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(todo.text);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  
+  const handleMenuToggle = () => {
+    if (!menuOpen && menuBtnRef.current) {
+      const rect = menuBtnRef.current.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: Math.min(rect.right - 160, window.innerWidth - 170),
+      });
+    }
+    setMenuOpen(!menuOpen);
+  };
   
   const relativeDate = formatRelativeDate(todo.createdAt);
   const isOld = getDaysDiff(new Date(todo.createdAt)) > 3;
@@ -1515,8 +1572,9 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
       {/* Three-dot menu */}
       <div className="todo-menu">
       <button
+          ref={menuBtnRef}
           className="menu-btn"
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={handleMenuToggle}
           aria-label="Task options"
         >
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -1529,7 +1587,7 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
         {menuOpen && (
           <>
             <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
-            <div className="menu-dropdown">
+            <div className="menu-dropdown" style={{ top: menuPosition.top, left: menuPosition.left }}>
               {!todo.completed && (
                 <button 
                   className="menu-item"
@@ -1708,11 +1766,24 @@ interface RecurringTaskItemProps {
 function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, onResume, onEdit, onDelete }: RecurringTaskItemProps) {
   const [showHistory, setShowHistory] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [editFrequency, setEditFrequency] = useState<RecurringFrequency>(task.frequency);
   const [editDayOfWeek, setEditDayOfWeek] = useState(task.dayOfWeek ?? 1);
   const [editDayOfMonth, setEditDayOfMonth] = useState(task.dayOfMonth ?? 1);
+  
+  const handleMenuToggle = () => {
+    if (!menuOpen && menuBtnRef.current) {
+      const rect = menuBtnRef.current.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: Math.min(rect.right - 160, window.innerWidth - 170),
+      });
+    }
+    setMenuOpen(!menuOpen);
+  };
   
   const frequencyLabel = getFrequencyLabel(task.frequency, task.customDays, task.dayOfWeek, task.dayOfMonth);
   const { canComplete, reason } = canCompleteToday(task);
@@ -1958,8 +2029,9 @@ function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, o
         {/* Three-dot menu */}
         <div className="todo-menu">
           <button 
+            ref={menuBtnRef}
             className="menu-btn"
-            onClick={() => setMenuOpen(!menuOpen)}
+            onClick={handleMenuToggle}
             aria-label="Task options"
           >
             <svg viewBox="0 0 24 24" fill="currentColor">
@@ -1972,7 +2044,7 @@ function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, o
           {menuOpen && (
             <>
               <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
-              <div className="menu-dropdown">
+              <div className="menu-dropdown" style={{ top: menuPosition.top, left: menuPosition.left }}>
                 {/* Edit button */}
                 <button 
                   className="menu-item"

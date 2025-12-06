@@ -47,6 +47,7 @@ export interface User {
   email: string;
   password: string;
   name: string;
+  encryptionSalt: string; // Salt for client-side encryption key derivation
   createdAt: Date;
 }
 

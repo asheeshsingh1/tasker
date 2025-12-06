@@ -450,15 +450,13 @@ body {
 }
 
 .menu-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  min-width: 140px;
+  position: fixed;
+  min-width: 160px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 16px var(--shadow-hover);
-  z-index: 20;
+  box-shadow: 0 4px 16px var(--shadow-hover), 0 8px 32px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
   overflow: hidden;
   animation: menuFadeIn 0.15s ease;
 }

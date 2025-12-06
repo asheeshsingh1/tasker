@@ -1,9 +1,15 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { randomBytes } from "crypto";
 import { connectToDatabase, OtpVerification, User } from "../_lib/mongodb.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
+
+// Generate a random salt for encryption
+function generateEncryptionSalt(): string {
+  return randomBytes(16).toString('base64');
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -60,11 +66,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // OTP is valid - create the user account
     const hashedPassword = await bcrypt.hash(password, 10);
+    const encryptionSalt = generateEncryptionSalt();
 
     const result = await users.insertOne({
       email: normalizedEmail,
       password: hashedPassword,
       name: name.trim(),
+      encryptionSalt,
       createdAt: new Date(),
     });
 
@@ -85,6 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         email: normalizedEmail,
         name: name.trim(),
       },
+      encryptionSalt, // Return salt for client-side encryption setup
     });
   } catch (error) {
     console.error("Verify OTP error:", error);
