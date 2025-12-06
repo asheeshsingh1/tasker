@@ -394,24 +394,12 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // First generate any due recurring tasks
-        const generated = await recurring.generate();
-        
-        // Then fetch all todos and recurring tasks
         const [todosData, recurringData] = await Promise.all([
           todos.list(),
           recurring.list(),
         ]);
         
-        // If new todos were generated, include them
-        if (generated.generated > 0) {
-          const existingIds = new Set(todosData.map(t => t.id));
-          const newTodos = generated.todos.filter(t => !existingIds.has(t.id));
-          setTodoList([...newTodos, ...todosData]);
-        } else {
-          setTodoList(todosData);
-        }
-        
+        setTodoList(todosData);
         setRecurringTasks(recurringData);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load data");
@@ -1338,9 +1326,8 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
         <span className="todo-text">{todo.text}</span>
         <div className="todo-meta">
           <span className="todo-date">{relativeDate}</span>
-              {isPaused && <span className="todo-status-badge paused">⏸ Paused</span>}
+          {isPaused && <span className="todo-status-badge paused">⏸ Paused</span>}
           {duration && <span className="todo-duration">⏱ {duration}</span>}
-              {todo.recurringTaskId && <span className="todo-recurring-badge">🔄</span>}
         </div>
           </>
         )}

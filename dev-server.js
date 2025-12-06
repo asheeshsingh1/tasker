@@ -79,11 +79,6 @@ app.post('/api/recurring', async (req, res) => {
   return handler(req, res);
 });
 
-app.post('/api/recurring/generate', async (req, res) => {
-  const handler = await loadHandler('./api/recurring/generate.ts');
-  return handler(req, res);
-});
-
 // Single recurring task routes (PATCH, DELETE, POST for actions)
 app.patch('/api/recurring/:id', async (req, res) => {
   req.query = { id: req.params.id };

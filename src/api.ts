@@ -163,11 +163,6 @@ export interface UpdateRecurringTaskData {
   isActive?: boolean;
 }
 
-export interface GenerateResult {
-  generated: number;
-  todos: Todo[];
-}
-
 export const recurring = {
   list: () => request<RecurringTask[]>(`/recurring?clientDate=${getLocalDateString()}`),
 
@@ -185,9 +180,6 @@ export const recurring = {
 
   delete: (id: string) =>
     request<void>(`/recurring/${id}`, { method: "DELETE" }),
-
-  generate: () =>
-    request<GenerateResult>("/recurring/generate", { method: "POST" }),
 
   complete: (id: string) =>
     request<RecurringTask>(`/recurring/${id}`, { 
