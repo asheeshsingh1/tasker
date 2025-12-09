@@ -1503,17 +1503,84 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuDropdownRef = useRef<HTMLDivElement>(null);
+  
+  const calculateMenuPosition = () => {
+    if (!menuBtnRef.current) return;
+    
+    const rect = menuBtnRef.current.getBoundingClientRect();
+    const menuWidth = 160;
+    const menuPadding = 8;
+    const spacing = 4;
+    
+    // Calculate horizontal position (ensure it doesn't go off-screen)
+    let left = rect.right - menuWidth;
+    if (left < menuPadding) {
+      left = menuPadding;
+    }
+    if (left + menuWidth > window.innerWidth - menuPadding) {
+      left = window.innerWidth - menuWidth - menuPadding;
+    }
+    
+    // Estimate menu height (approximately 40px per item, with 3 items max)
+    const estimatedMenuHeight = 120;
+    const spaceBelow = window.innerHeight - rect.bottom - spacing;
+    const spaceAbove = rect.top - spacing;
+    
+    // Position above if not enough space below, but enough space above
+    let top: number;
+    if (spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow) {
+      // Position above the button
+      top = rect.top - estimatedMenuHeight - spacing;
+      // Ensure it doesn't go above viewport
+      if (top < menuPadding) {
+        top = menuPadding;
+      }
+    } else {
+      // Position below the button
+      top = rect.bottom + spacing;
+      // Ensure it doesn't go below viewport
+      if (top + estimatedMenuHeight > window.innerHeight - menuPadding) {
+        top = window.innerHeight - estimatedMenuHeight - menuPadding;
+      }
+    }
+    
+    setMenuPosition({ top, left });
+  };
   
   const handleMenuToggle = () => {
-    if (!menuOpen && menuBtnRef.current) {
-      const rect = menuBtnRef.current.getBoundingClientRect();
-      setMenuPosition({
-        top: rect.bottom + 4,
-        left: Math.min(rect.right - 160, window.innerWidth - 170),
-      });
+    if (!menuOpen) {
+      calculateMenuPosition();
     }
     setMenuOpen(!menuOpen);
   };
+  
+  // Recalculate position when menu opens to account for actual menu height
+  useEffect(() => {
+    if (menuOpen && menuDropdownRef.current) {
+      const rect = menuBtnRef.current?.getBoundingClientRect();
+      const menuRect = menuDropdownRef.current.getBoundingClientRect();
+      if (rect) {
+        const menuPadding = 8;
+        const spacing = 4;
+        
+        // If menu is positioned below but doesn't fit, move it above
+        if (menuPosition.top >= rect.bottom && menuRect.bottom > window.innerHeight - menuPadding) {
+          const newTop = rect.top - menuRect.height - spacing;
+          if (newTop >= menuPadding) {
+            setMenuPosition({ ...menuPosition, top: newTop });
+          }
+        }
+        // If menu is positioned above but doesn't fit, move it below
+        else if (menuPosition.top < rect.top && menuRect.top < menuPadding) {
+          const newTop = rect.bottom + spacing;
+          if (newTop + menuRect.height <= window.innerHeight - menuPadding) {
+            setMenuPosition({ ...menuPosition, top: newTop });
+          }
+        }
+      }
+    }
+  }, [menuOpen, menuPosition]);
   
   const relativeDate = formatRelativeDate(todo.createdAt);
   const isOld = getDaysDiff(new Date(todo.createdAt)) > 3;
@@ -1594,7 +1661,7 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
         {menuOpen && (
           <>
             <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
-            <div className="menu-dropdown" style={{ top: menuPosition.top, left: menuPosition.left }}>
+            <div ref={menuDropdownRef} className="menu-dropdown" style={{ top: menuPosition.top, left: menuPosition.left }}>
               {!todo.completed && (
                 <button 
                   className="menu-item"
@@ -1775,22 +1842,89 @@ function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, o
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuDropdownRef = useRef<HTMLDivElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [editFrequency, setEditFrequency] = useState<RecurringFrequency>(task.frequency);
   const [editDayOfWeek, setEditDayOfWeek] = useState(task.dayOfWeek ?? 1);
   const [editDayOfMonth, setEditDayOfMonth] = useState(task.dayOfMonth ?? 1);
   
+  const calculateMenuPosition = () => {
+    if (!menuBtnRef.current) return;
+    
+    const rect = menuBtnRef.current.getBoundingClientRect();
+    const menuWidth = 160;
+    const menuPadding = 8;
+    const spacing = 4;
+    
+    // Calculate horizontal position (ensure it doesn't go off-screen)
+    let left = rect.right - menuWidth;
+    if (left < menuPadding) {
+      left = menuPadding;
+    }
+    if (left + menuWidth > window.innerWidth - menuPadding) {
+      left = window.innerWidth - menuWidth - menuPadding;
+    }
+    
+    // Estimate menu height (approximately 40px per item, with up to 5 items)
+    const estimatedMenuHeight = 200;
+    const spaceBelow = window.innerHeight - rect.bottom - spacing;
+    const spaceAbove = rect.top - spacing;
+    
+    // Position above if not enough space below, but enough space above
+    let top: number;
+    if (spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow) {
+      // Position above the button
+      top = rect.top - estimatedMenuHeight - spacing;
+      // Ensure it doesn't go above viewport
+      if (top < menuPadding) {
+        top = menuPadding;
+      }
+    } else {
+      // Position below the button
+      top = rect.bottom + spacing;
+      // Ensure it doesn't go below viewport
+      if (top + estimatedMenuHeight > window.innerHeight - menuPadding) {
+        top = window.innerHeight - estimatedMenuHeight - menuPadding;
+      }
+    }
+    
+    setMenuPosition({ top, left });
+  };
+  
   const handleMenuToggle = () => {
-    if (!menuOpen && menuBtnRef.current) {
-      const rect = menuBtnRef.current.getBoundingClientRect();
-      setMenuPosition({
-        top: rect.bottom + 4,
-        left: Math.min(rect.right - 160, window.innerWidth - 170),
-      });
+    if (!menuOpen) {
+      calculateMenuPosition();
     }
     setMenuOpen(!menuOpen);
   };
+  
+  // Recalculate position when menu opens to account for actual menu height
+  useEffect(() => {
+    if (menuOpen && menuDropdownRef.current) {
+      const rect = menuBtnRef.current?.getBoundingClientRect();
+      const menuRect = menuDropdownRef.current.getBoundingClientRect();
+      if (rect) {
+        const menuPadding = 8;
+        const spacing = 4;
+        
+        // If menu is positioned below but doesn't fit, move it above
+        if (menuPosition.top >= rect.bottom && menuRect.bottom > window.innerHeight - menuPadding) {
+          const newTop = rect.top - menuRect.height - spacing;
+          if (newTop >= menuPadding) {
+            setMenuPosition({ ...menuPosition, top: newTop });
+          }
+        }
+        // If menu is positioned above but doesn't fit, move it below
+        else if (menuPosition.top < rect.top && menuRect.top < menuPadding) {
+          const newTop = rect.bottom + spacing;
+          if (newTop + menuRect.height <= window.innerHeight - menuPadding) {
+            setMenuPosition({ ...menuPosition, top: newTop });
+          }
+        }
+      }
+    }
+  }, [menuOpen, menuPosition]);
   
   const frequencyLabel = getFrequencyLabel(task.frequency, task.customDays, task.dayOfWeek, task.dayOfMonth);
   const { canComplete, reason } = canCompleteToday(task);
@@ -2051,7 +2185,7 @@ function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, o
           {menuOpen && (
             <>
               <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
-              <div className="menu-dropdown" style={{ top: menuPosition.top, left: menuPosition.left }}>
+              <div ref={menuDropdownRef} className="menu-dropdown" style={{ top: menuPosition.top, left: menuPosition.left }}>
                 {/* Edit button */}
                 <button 
                   className="menu-item"
