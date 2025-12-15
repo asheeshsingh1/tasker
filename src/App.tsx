@@ -1927,7 +1927,7 @@ function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, o
   }, [menuOpen, menuPosition]);
   
   const frequencyLabel = getFrequencyLabel(task.frequency, task.customDays, task.dayOfWeek, task.dayOfMonth);
-  const { canComplete, reason } = canCompleteToday(task);
+  const { canComplete } = canCompleteToday(task);
   const completions = task.completions || [];
   const todayStr = getTodayString();
   const todayCompletion = completions.find(c => c.scheduledDate === todayStr);
@@ -1971,35 +1971,49 @@ function RecurringTaskItem({ task, onStart, onComplete, onUncomplete, onPause, o
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
   
-  // Get time taken for a completion record
-  const getCompletionTime = (completion: CompletionRecord) => {
-    if (completion.status === 'completed' && completion.timeTaken != null) {
-      return formatTime(completion.timeTaken);
-    }
-    return null;
-  };
-  
   // Get history with completion data - use actual completions from database
   const getHistoryItems = () => {
     const todayStr = getTodayString();
-    
-    // Sort completions by date (newest first) and limit to 100
-    const sortedCompletions = [...completions]
-      .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
-      .slice(0, 100);
-    
-    return sortedCompletions.map(c => {
-      // If it's a past date and task wasn't completed, show as "missed"
-      const isPastDate = c.scheduledDate < todayStr;
-      const isIncomplete = c.status !== 'completed' && c.status !== 'missed';
-      const displayStatus = (isPastDate && isIncomplete) ? 'missed' : c.status;
-      
-      return {
-        date: c.scheduledDate,
-        status: displayStatus,
-        timeTaken: c.timeTaken
-      };
+    const scheduledDates = getScheduledDates(task, 30);
+    const completionsMap = new Map((completions || []).map(c => [c.scheduledDate, c]));
+    const items: Array<{ date: string; status: HistoryStatus; timeTaken: number | null }> = [];
+
+    // Build entries for every scheduled date so we surface missed days too
+    scheduledDates.forEach(date => {
+      const completion = completionsMap.get(date);
+      if (completion) {
+        const isPastDate = date < todayStr;
+        const isIncomplete = completion.status !== 'completed' && completion.status !== 'missed';
+        const status: HistoryStatus = (isPastDate && isIncomplete) ? 'missed' : completion.status;
+        items.push({
+          date,
+          status,
+          timeTaken: completion.status === 'completed' ? completion.timeTaken ?? null : null,
+        });
+      } else {
+        const status: HistoryStatus = date < todayStr ? 'missed' : 'pending';
+        items.push({ date, status, timeTaken: null });
+      }
     });
+
+    // Include any completion records that fall outside the scheduled window (defensive)
+    completions.forEach(c => {
+      if (!scheduledDates.includes(c.scheduledDate)) {
+        const isPastDate = c.scheduledDate < todayStr;
+        const isIncomplete = c.status !== 'completed' && c.status !== 'missed';
+        const status: HistoryStatus = (isPastDate && isIncomplete) ? 'missed' : c.status;
+        items.push({
+          date: c.scheduledDate,
+          status,
+          timeTaken: c.status === 'completed' ? c.timeTaken ?? null : null,
+        });
+      }
+    });
+
+    // Sort newest first and cap to 100
+    return items
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 100);
   };
   
   const historyItems = getHistoryItems();
