@@ -296,7 +296,8 @@ async function handleComplete(existing: RecurringTask, recurringTasks: any, clie
   }
   
   const now = new Date();
-  const timeTaken = now.getTime() - new Date(startedAt).getTime() - totalPausedTime;
+  // Calculate timeTaken, ensuring it's never negative (safeguard against edge cases)
+  const timeTaken = Math.max(0, now.getTime() - new Date(startedAt).getTime() - totalPausedTime);
   
   completions[existingIndex] = {
     ...completions[existingIndex],
@@ -327,6 +328,9 @@ async function handleUncomplete(existing: RecurringTask, recurringTasks: any, cl
     throw new Error("Task is not completed for today");
   }
 
+  // When uncompleting, we need to exclude the time spent in completed state from future timeTaken calculations.
+  // We do this by adding it to totalPausedTime, which gets subtracted in the timeTaken formula.
+  // This ensures timeTaken only includes actual in-progress time, not time spent in completed state.
   const now = new Date();
   const completedAt = existingCompletion.completedAt ? new Date(existingCompletion.completedAt) : now;
   const timeInCompletedState = now.getTime() - completedAt.getTime();
@@ -337,6 +341,7 @@ async function handleUncomplete(existing: RecurringTask, recurringTasks: any, cl
     completedAt: null,
     status: 'in_progress',
     timeTaken: null,
+    // Add completed time to totalPausedTime so it's excluded from timeTaken calculation
     totalPausedTime: newTotalPausedTime,
   };
 
