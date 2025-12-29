@@ -1,17 +1,33 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent, type KeyboardEvent, type FormEvent } from "react";
 import { auth, todos, recurring, setToken, type User, type Todo, type RecurringTask, type RecurringFrequency, type CompletionRecord } from "./api";
 import { initializeEncryption, clearEncryption, encryptText, decryptTasks, isEncryptionReady } from "./crypto";
+import { Settings } from "./components/Settings";
+import { getSettings, initializeSettings, loadSettingsFromServer, applyTheme } from "./settings";
+import { getToken } from "./api";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Check for existing session on mount
+  // Initialize settings (theme) on mount
+  useEffect(() => {
+    initializeSettings();
+  }, []);
+
+  // Check for existing session on mount and load settings
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const { user } = await auth.me();
         setUser(user);
+        // Load settings from database after successful auth
+        try {
+          const settings = await loadSettingsFromServer();
+          // Apply theme from database
+          applyTheme(settings.theme);
+        } catch (settingsError) {
+          console.warn('Failed to load settings from server:', settingsError);
+        }
       } catch {
         setToken(null);
       } finally {
@@ -98,7 +114,23 @@ function AuthForm({ onAuth }: AuthFormProps) {
       const result = await auth.verifyOtp(email, otp, password, name);
       setToken(result.token);
       // Initialize encryption with password and salt
-      await initializeEncryption(password, result.encryptionSalt);
+      try {
+        await initializeEncryption(password, result.encryptionSalt);
+      } catch (cryptoError) {
+        // If crypto is not available, show helpful error but still allow registration
+        const errorMsg = cryptoError instanceof Error ? cryptoError.message : 'Encryption initialization failed';
+        if (errorMsg.includes('Web Crypto API is not available')) {
+          setError(
+            '⚠️ Encryption unavailable: Please access via HTTPS or localhost. ' +
+            'Your data will be stored without encryption. ' +
+            'For security, use https://localhost:5173 or set up HTTPS.'
+          );
+          // Still allow registration without encryption
+          onAuth(result.user);
+          return;
+        }
+        throw cryptoError;
+      }
       onAuth(result.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to verify code");
@@ -116,7 +148,23 @@ function AuthForm({ onAuth }: AuthFormProps) {
       const result = await auth.login(email, password);
       setToken(result.token);
       // Initialize encryption with password and salt
-      await initializeEncryption(password, result.encryptionSalt);
+      try {
+        await initializeEncryption(password, result.encryptionSalt);
+      } catch (cryptoError) {
+        // If crypto is not available, show helpful error but still allow login
+        const errorMsg = cryptoError instanceof Error ? cryptoError.message : 'Encryption initialization failed';
+        if (errorMsg.includes('Web Crypto API is not available')) {
+          setError(
+            '⚠️ Encryption unavailable: Please access via HTTPS or localhost. ' +
+            'Your data will be stored without encryption. ' +
+            'For security, use https://localhost:5173 or set up HTTPS.'
+          );
+          // Still allow login without encryption
+          onAuth(result.user);
+          return;
+        }
+        throw cryptoError;
+      }
       onAuth(result.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -555,6 +603,22 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const [todoList, setTodoList] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  
+  // Load settings from database when component mounts
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        // Fetch settings from database
+        const settings = await getSettings();
+        // Apply theme from database
+        applyTheme(settings.theme);
+      } catch (error) {
+        console.warn('Failed to load settings on mount:', error);
+      }
+    };
+    loadSettings();
+  }, []);
   
   // View mode: tasks or recurring
   const [viewMode, setViewMode] = useState<ViewMode>("tasks");
@@ -575,6 +639,73 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const [recurringStatusFilter, setRecurringStatusFilter] = useState<RecurringStatusFilter>("all");
   const [showRecurringFilters, setShowRecurringFilters] = useState(false);
 
+  // Auto-complete logic for recurring tasks
+  const autoCompletePastTasks = async (tasks: RecurringTask[]) => {
+    try {
+      const settings = await getSettings();
+      if (!settings.autoCompleteRecurring) return;
+
+      const todayStr = getTodayString();
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+      // Process tasks that need auto-completion for yesterday
+      const tasksToComplete: string[] = [];
+
+      for (const task of tasks) {
+        if (!task.isActive) continue;
+        
+        const completions = task.completions || [];
+        const yesterdayCompletion = completions.find(c => c.scheduledDate === yesterdayStr);
+        
+        // Only auto-complete if task was in progress yesterday
+        // Tasks that are pending or paused will be marked as missed by the API automatically
+        if (yesterdayCompletion && yesterdayCompletion.status === 'in_progress') {
+          tasksToComplete.push(task.id);
+        }
+      }
+
+      // Auto-complete tasks that were in progress yesterday
+      for (const id of tasksToComplete) {
+        try {
+          // Complete the task for yesterday's date
+          const response = await fetch(`/api/recurring/${id}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({ 
+              action: 'complete', 
+              clientDate: yesterdayStr 
+            }),
+          });
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: response.statusText }));
+            console.error(`Failed to auto-complete task ${id}:`, error.error || error);
+          }
+        } catch (err) {
+          console.error(`Failed to auto-complete task ${id}:`, err);
+        }
+      }
+
+      // If we updated any tasks, refetch to get the latest state
+      // (missed tasks will be marked by the API automatically)
+      if (tasksToComplete.length > 0) {
+        try {
+          const updatedData = await recurring.list();
+          const decryptedRecurring = await decryptTasks(updatedData);
+          setRecurringTasks(decryptedRecurring);
+        } catch (err) {
+          console.error('Failed to refresh tasks after auto-complete:', err);
+        }
+      }
+    } catch (err) {
+      console.warn('Auto-complete check failed:', err);
+    }
+  };
+
   // Fetch todos and recurring tasks on mount
   useEffect(() => {
     const fetchData = async () => {
@@ -590,6 +721,9 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
         
         setTodoList(decryptedTodos);
         setRecurringTasks(decryptedRecurring);
+        
+        // Auto-complete past tasks if enabled
+        await autoCompletePastTasks(decryptedRecurring);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load data");
       } finally {
@@ -971,10 +1105,12 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
             <h1 className="app-title">Tasker</h1>
             <p className="app-subtitle">Hello, {user.name} 👋</p>
           </div>
-          <button className="logout-btn" onClick={onLogout}>
-            Sign out
+          <button className="settings-btn" onClick={() => setShowSettings(true)}>
+            ⚙️ Settings
           </button>
         </div>
+        
+        <Settings isOpen={showSettings} onClose={() => setShowSettings(false)} onLogout={onLogout} />
         
         {/* View Mode Tabs */}
         <div className="view-tabs">

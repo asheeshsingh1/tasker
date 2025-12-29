@@ -1810,6 +1810,7 @@ body {
   .header-row {
     flex-direction: row;
     align-items: center;
+    gap: 0.5rem;
   }
   
   .header-row > div {
@@ -1819,6 +1820,15 @@ body {
   
   .logout-btn {
     flex-shrink: 0;
+  }
+  
+  .settings-btn {
+    flex-shrink: 0;
+    min-width: auto;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    min-height: 44px; /* iOS touch target */
   }
   
   .filter-group {
@@ -1846,6 +1856,275 @@ body {
     display: flex;
     width: 100%;
     gap: 0.25rem;
+  }
+}
+
+/* Dark Theme - Must use :root.dark-theme to override :root variables */
+:root.dark-theme {
+  /* Dark background palette */
+  --bg-main: #1a1a1a;
+  --bg-card: #242424;
+  --bg-item: #2a2a2a;
+  --bg-item-hover: #333333;
+  --bg-completed: #2d2d2d;
+  
+  /* Text colors */
+  --text-primary: #e8e8e8;
+  --text-secondary: #b0b0b0;
+  --text-muted: #808080;
+  --text-completed: #666666;
+  
+  /* Accent colors (slightly adjusted for dark) */
+  --accent: #e67e5a;
+  --accent-hover: #f58b6a;
+  --accent-light: rgba(230, 126, 90, 0.15);
+  --accent-glow: rgba(230, 126, 90, 0.3);
+  
+  /* UI colors */
+  --border: #3a3a3a;
+  --border-focus: #e67e5a;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --shadow-hover: rgba(0, 0, 0, 0.5);
+  --danger: #e74c3c;
+  --danger-hover: #c0392b;
+  --success: #52c97f;
+}
+
+/* Settings Button */
+.settings-btn {
+  padding: 0.5rem 0.875rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-right: 0.5rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.settings-btn:hover {
+  background: var(--bg-item-hover);
+  border-color: var(--text-muted);
+}
+
+/* Settings Modal */
+.settings-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.settings-content {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px var(--shadow);
+  animation: slideUp 0.3s ease;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.settings-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.settings-close-btn:hover {
+  background: var(--bg-item-hover);
+  color: var(--text-primary);
+}
+
+.settings-section {
+  margin-bottom: 2rem;
+}
+
+.settings-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.settings-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: var(--bg-item);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.settings-option:hover {
+  background: var(--bg-item-hover);
+  border-color: var(--border-focus);
+}
+
+.settings-option-label {
+  flex: 1;
+}
+
+.settings-option-label-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.settings-option-label-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border);
+  transition: 0.3s;
+  border-radius: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+}
+
+/* Theme Selector */
+.theme-selector {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.theme-option {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: var(--bg-item);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: center;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.theme-option:hover {
+  background: var(--bg-item-hover);
+}
+
+.theme-option.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* Settings Logout Button */
+.settings-logout-btn {
+  width: 100%;
+  padding: 0.875rem 1.5rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 0.5rem;
+}
+
+.settings-logout-btn:hover {
+  background: var(--danger);
+  color: white;
+}
+
+@media (max-width: 480px) {
+  .settings-content {
+    padding: 1.5rem;
   }
   
   .view-tab {

@@ -108,6 +108,22 @@ app.post('/api/recurring/:id', async (req, res) => {
   return handler(req, res);
 });
 
+// User settings routes
+app.get('/api/settings', async (req, res) => {
+  const handler = await loadHandler('./api/settings.ts');
+  return handler(req, res);
+});
+
+app.patch('/api/settings', async (req, res) => {
+  const handler = await loadHandler('./api/settings.ts');
+  return handler(req, res);
+});
+
+app.options('/api/settings', async (req, res) => {
+  const handler = await loadHandler('./api/settings.ts');
+  return handler(req, res);
+});
+
 const PORT = 3001;
 const HOST = '0.0.0.0'; // Listen on all network interfaces
 app.listen(PORT, HOST, () => {

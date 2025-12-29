@@ -1,6 +1,6 @@
 const API_BASE = "/api";
 
-function getToken(): string | null {
+export function getToken(): string | null {
   return localStorage.getItem("token");
 }
 
@@ -227,6 +227,22 @@ export const recurring = {
     request<RecurringTask>(`/recurring/${id}`, { 
       method: "POST",
       body: JSON.stringify({ action: 'resume', clientDate: getLocalDateString() }),
+    }),
+};
+
+// User Settings API
+export interface UserPreferences {
+  autoCompleteRecurring?: boolean;
+  theme?: 'light' | 'dark';
+}
+
+export const userSettings = {
+  get: () => request<{ preferences: UserPreferences }>("/settings"),
+  
+  update: (preferences: Partial<UserPreferences>) =>
+    request<{ preferences: UserPreferences }>("/settings", {
+      method: "PATCH",
+      body: JSON.stringify({ preferences }),
     }),
 };
 

@@ -42,12 +42,18 @@ export async function connectToDatabase(): Promise<{ client: MongoClient; db: Db
 }
 
 // User type
+export interface UserPreferences {
+  autoCompleteRecurring?: boolean;
+  theme?: 'light' | 'dark';
+}
+
 export interface User {
   _id?: ObjectId;
   email: string;
   password: string;
   name: string;
   encryptionSalt: string; // Salt for client-side encryption key derivation
+  preferences?: UserPreferences; // User settings/preferences
   createdAt: Date;
 }
 

@@ -9,6 +9,33 @@ const ITERATIONS = 100000; // PBKDF2 iterations
 const ENCRYPTION_KEY_STORAGE = 'tasker_encryption_key';
 const SALT_STORAGE = 'tasker_salt';
 
+// Check if Web Crypto API is available
+function isCryptoAvailable(): boolean {
+  return typeof crypto !== 'undefined' && 
+         typeof crypto.subtle !== 'undefined' &&
+         typeof crypto.getRandomValues !== 'undefined';
+}
+
+// Get crypto.subtle with error handling
+function getCryptoSubtle(): SubtleCrypto {
+  if (!isCryptoAvailable()) {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+    
+    if (protocol === 'http:' && !isLocalhost) {
+      throw new Error(
+        'Web Crypto API is not available. ' +
+        'Please access the app via HTTPS or use localhost. ' +
+        `Current URL: ${protocol}//${hostname}${window.location.port ? ':' + window.location.port : ''}`
+      );
+    } else {
+      throw new Error('Web Crypto API is not available in this browser or context.');
+    }
+  }
+  return crypto.subtle;
+}
+
 // Convert ArrayBuffer to Base64 string
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -37,12 +64,13 @@ export function generateSalt(): string {
 
 // Derive encryption key from password and salt using PBKDF2
 async function deriveKey(password: string, salt: string): Promise<CryptoKey> {
+  const subtle = getCryptoSubtle();
   const encoder = new TextEncoder();
   const passwordBuffer = encoder.encode(password);
   const saltBuffer = base64ToArrayBuffer(salt);
 
   // Import password as key material
-  const keyMaterial = await crypto.subtle.importKey(
+  const keyMaterial = await subtle.importKey(
     'raw',
     passwordBuffer,
     'PBKDF2',
@@ -51,7 +79,7 @@ async function deriveKey(password: string, salt: string): Promise<CryptoKey> {
   );
 
   // Derive AES key from password
-  return crypto.subtle.deriveKey(
+  return subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt: saltBuffer,
@@ -69,19 +97,23 @@ async function deriveKey(password: string, salt: string): Promise<CryptoKey> {
 // Note: This is a trade-off between UX and security
 // The key is derived from the password, so it's still protected
 async function storeKey(key: CryptoKey): Promise<void> {
-  const exported = await crypto.subtle.exportKey('raw', key);
+  const subtle = getCryptoSubtle();
+  const exported = await subtle.exportKey('raw', key);
   const keyString = arrayBufferToBase64(exported);
   localStorage.setItem(ENCRYPTION_KEY_STORAGE, keyString);
 }
 
 // Retrieve stored encryption key
 async function getStoredKey(): Promise<CryptoKey | null> {
+  if (!isCryptoAvailable()) return null;
+  
   const keyString = localStorage.getItem(ENCRYPTION_KEY_STORAGE);
   if (!keyString) return null;
 
   try {
+    const subtle = getCryptoSubtle();
     const keyBuffer = base64ToArrayBuffer(keyString);
-    return crypto.subtle.importKey(
+    return subtle.importKey(
       'raw',
       keyBuffer,
       { name: ALGORITHM, length: KEY_LENGTH },
@@ -123,6 +155,10 @@ export function isEncryptionReady(): boolean {
 
 // Encrypt text
 export async function encryptText(plaintext: string): Promise<string> {
+  if (!isCryptoAvailable()) {
+    throw new Error('Web Crypto API is not available. Encryption cannot be performed.');
+  }
+  
   const key = await getStoredKey();
   if (!key) {
     throw new Error('Encryption not initialized. Please log in again.');
@@ -134,7 +170,8 @@ export async function encryptText(plaintext: string): Promise<string> {
   // Generate random IV for each encryption
   const iv = crypto.getRandomValues(new Uint8Array(12));
   
-  const encrypted = await crypto.subtle.encrypt(
+  const subtle = getCryptoSubtle();
+  const encrypted = await subtle.encrypt(
     { name: ALGORITHM, iv },
     key,
     data
@@ -148,11 +185,40 @@ export async function encryptText(plaintext: string): Promise<string> {
   return arrayBufferToBase64(combined.buffer);
 }
 
+// Check if a string looks like encrypted data (base64, typically longer than normal text)
+function looksLikeEncrypted(text: string): boolean {
+  // Encrypted data is base64, typically longer and matches base64 pattern
+  if (text.length < 20) return false; // Too short to be encrypted
+  
+  // Check if it's valid base64
+  try {
+    const decoded = atob(text);
+    // Encrypted data should have at least 12 bytes (IV) + some encrypted content
+    return decoded.length >= 12;
+  } catch {
+    return false; // Not valid base64
+  }
+}
+
 // Decrypt text
 export async function decryptText(ciphertext: string): Promise<string> {
+  if (!isCryptoAvailable()) {
+    // If crypto is not available but data looks encrypted, show a helpful message
+    if (isEncryptionReady() && looksLikeEncrypted(ciphertext)) {
+      return '[🔒 Encrypted - Please use HTTPS or localhost to decrypt]';
+    }
+    // Otherwise return as-is (might be unencrypted legacy data)
+    return ciphertext;
+  }
+  
   const key = await getStoredKey();
   if (!key) {
-    throw new Error('Encryption not initialized. Please log in again.');
+    // If we have encrypted data but no key, show a message
+    if (looksLikeEncrypted(ciphertext)) {
+      return '[🔒 Encrypted - Please log in to decrypt]';
+    }
+    // Otherwise return as-is (might be unencrypted legacy data)
+    return ciphertext;
   }
 
   try {
@@ -162,7 +228,8 @@ export async function decryptText(ciphertext: string): Promise<string> {
     const iv = combined.slice(0, 12);
     const encrypted = combined.slice(12);
 
-    const decrypted = await crypto.subtle.decrypt(
+    const subtle = getCryptoSubtle();
+    const decrypted = await subtle.decrypt(
       { name: ALGORITHM, iv },
       key,
       encrypted
@@ -171,6 +238,10 @@ export async function decryptText(ciphertext: string): Promise<string> {
     const decoder = new TextDecoder();
     return decoder.decode(decrypted);
   } catch {
+    // If decryption fails but it looks encrypted, show a message
+    if (looksLikeEncrypted(ciphertext)) {
+      return '[🔒 Decryption failed - Data may be corrupted]';
+    }
     // Return original if decryption fails (might be unencrypted legacy data)
     return ciphertext;
   }
