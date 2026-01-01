@@ -14,6 +14,12 @@ function formatTodo(t: Todo) {
     totalPausedTime: t.totalPausedTime || 0,
     completedAt: t.completedAt?.toISOString() || null,
     recurringTaskId: t.recurringTaskId || null,
+    subtasks: (t.subtasks || []).map(st => ({
+      id: st.id,
+      text: st.text,
+      completed: st.completed,
+      createdAt: st.createdAt.toISOString(),
+    })),
   };
 }
 
@@ -56,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         totalPausedTime: 0,
         completedAt: null,
         recurringTaskId: recurringTaskId || null,
+        subtasks: [],
       });
 
       const newTodo = await todos.findOne({ _id: result.insertedId });

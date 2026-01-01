@@ -4,11 +4,13 @@ import { userSettings, type UserPreferences } from './api';
 export interface AppSettings {
   autoCompleteRecurring: boolean;
   theme: 'light' | 'dark';
+  enableSubtasks: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   autoCompleteRecurring: false,
   theme: 'light',
+  enableSubtasks: false,
 };
 
 // Get settings from database only (no localStorage)
@@ -18,6 +20,7 @@ export async function getSettings(): Promise<AppSettings> {
     const dbSettings: AppSettings = {
       autoCompleteRecurring: response.preferences.autoCompleteRecurring ?? DEFAULT_SETTINGS.autoCompleteRecurring,
       theme: response.preferences.theme ?? DEFAULT_SETTINGS.theme,
+      enableSubtasks: response.preferences.enableSubtasks ?? DEFAULT_SETTINGS.enableSubtasks,
     };
     return dbSettings;
   } catch (error) {
@@ -34,6 +37,7 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
     const response = await userSettings.update({
       autoCompleteRecurring: settings.autoCompleteRecurring,
       theme: settings.theme,
+      enableSubtasks: settings.enableSubtasks,
     });
     console.log('Settings saved successfully:', response);
     // Apply theme immediately

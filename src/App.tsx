@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent, type KeyboardEvent, type FormEvent } from "react";
-import { auth, todos, recurring, setToken, type User, type Todo, type RecurringTask, type RecurringFrequency, type CompletionRecord } from "./api";
+import { auth, todos, recurring, setToken, type User, type Todo, type Subtask, type RecurringTask, type RecurringFrequency, type CompletionRecord } from "./api";
 import { initializeEncryption, clearEncryption, encryptText, decryptTasks, isEncryptionReady } from "./crypto";
 import { Settings } from "./components/Settings";
 import { getSettings, initializeSettings, loadSettingsFromServer, applyTheme } from "./settings";
@@ -604,21 +604,32 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [enableSubtasks, setEnableSubtasks] = useState(false);
   
-  // Load settings from database when component mounts
+  // Load settings from database when component mounts and when settings modal closes
+  const loadSettings = async () => {
+    try {
+      // Fetch settings from database
+      const settings = await getSettings();
+      // Apply theme from database
+      applyTheme(settings.theme);
+      // Store subtasks setting
+      setEnableSubtasks(settings.enableSubtasks);
+    } catch (error) {
+      console.warn('Failed to load settings:', error);
+    }
+  };
+
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        // Fetch settings from database
-        const settings = await getSettings();
-        // Apply theme from database
-        applyTheme(settings.theme);
-      } catch (error) {
-        console.warn('Failed to load settings on mount:', error);
-      }
-    };
     loadSettings();
   }, []);
+
+  // Reload settings when settings modal closes (in case user changed settings)
+  useEffect(() => {
+    if (!showSettings) {
+      loadSettings();
+    }
+  }, [showSettings]);
   
   // View mode: tasks or recurring
   const [viewMode, setViewMode] = useState<ViewMode>("tasks");
@@ -884,6 +895,15 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
     const todo = todoList.find((t) => t.id === id);
     if (!todo) return;
 
+    // Prevent completing if subtasks exist and not all are completed (only if feature is enabled)
+    if (enableSubtasks && !todo.completed && todo.subtasks && todo.subtasks.length > 0) {
+      const allCompleted = todo.subtasks.every(st => st.completed);
+      if (!allCompleted) {
+        setError("Please complete all subtasks before marking the task as complete");
+        return;
+      }
+    }
+
     try {
       const updated = await todos.update(id, { completed: !todo.completed });
       // Keep the decrypted text from current state
@@ -933,6 +953,19 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
       setTodoList(todoList.filter((t) => t.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete task");
+    }
+  };
+
+  const updateSubtasks = async (id: string, subtasks: Subtask[]) => {
+    try {
+      const updated = await todos.update(id, { subtasks });
+      // Keep the decrypted text from current state
+      const todo = todoList.find((t) => t.id === id);
+      if (todo) {
+        setTodoList(todoList.map((t) => (t.id === id ? { ...updated, text: todo.text } : t)));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update subtasks");
     }
   };
 
@@ -1110,7 +1143,7 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
           </button>
         </div>
         
-        <Settings isOpen={showSettings} onClose={() => setShowSettings(false)} onLogout={onLogout} />
+        <Settings isOpen={showSettings} onClose={() => setShowSettings(false)} onLogout={onLogout} todoList={todoList} />
         
         {/* View Mode Tabs */}
         <div className="view-tabs">
@@ -1438,10 +1471,12 @@ function TodoApp({ user, onLogout }: TodoAppProps) {
               key={todo.id}
               todo={todo}
               onToggle={toggleTask}
-                onEdit={editTask}
-                onPause={pauseTask}
-                onResume={resumeTask}
+              onEdit={editTask}
+              onPause={pauseTask}
+              onResume={resumeTask}
               onDelete={deleteTask}
+              onUpdateSubtasks={updateSubtasks}
+              enableSubtasks={enableSubtasks}
             />
           ))
         )}
@@ -1624,6 +1659,97 @@ function EmptyState({ hasFilters }: EmptyStateProps) {
 }
 
 // Todo Item Component
+interface SubtaskItemProps {
+  subtask: Subtask;
+  onToggle: () => void;
+  onDelete: () => void;
+  onEdit: (text: string) => void;
+  disabled?: boolean;
+}
+
+function SubtaskItem({ subtask, onToggle, onDelete, onEdit, disabled }: SubtaskItemProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(subtask.text);
+
+  const handleSave = () => {
+    if (editText.trim() && editText.trim() !== subtask.text) {
+      onEdit(editText.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditText(subtask.text);
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleSave();
+    if (e.key === 'Escape') handleCancel();
+  };
+
+  return (
+    <div className={`subtask-item ${subtask.completed ? 'completed' : ''} ${isEditing ? 'editing' : ''}`}>
+      {!isEditing && (
+        <label className={`checkbox ${disabled ? 'disabled' : ''}`}>
+          <input
+            type="checkbox"
+            checked={subtask.completed}
+            onChange={onToggle}
+            disabled={disabled}
+          />
+          <span className="checkbox-visual" />
+        </label>
+      )}
+      {isEditing ? (
+        <div className="subtask-edit-row">
+          <input
+            type="text"
+            className="subtask-edit-input"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            autoFocus
+          />
+          <button className="subtask-save-btn" onClick={handleSave}>Save</button>
+          <button className="subtask-cancel-btn" onClick={handleCancel}>Cancel</button>
+        </div>
+      ) : (
+        <>
+          <span className="subtask-text" onDoubleClick={() => !disabled && !subtask.completed && setIsEditing(true)}>
+            {subtask.text}
+          </span>
+          {!disabled && (
+            <div className="subtask-actions">
+              {!subtask.completed && (
+                <button
+                  className="subtask-edit-btn"
+                  onClick={() => setIsEditing(true)}
+                  title="Edit subtask"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+              )}
+              <button
+                className="subtask-delete-btn"
+                onClick={onDelete}
+                title="Delete subtask"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 interface TodoItemProps {
   todo: Todo;
   onToggle: (id: string) => void;
@@ -1631,15 +1757,24 @@ interface TodoItemProps {
   onPause: (id: string) => void;
   onResume: (id: string) => void;
   onDelete: (id: string) => void;
+  onUpdateSubtasks: (id: string, subtasks: Subtask[]) => void;
+  enableSubtasks: boolean;
 }
 
-function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoItemProps) {
+function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete, onUpdateSubtasks, enableSubtasks }: TodoItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(todo.text);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuDropdownRef = useRef<HTMLDivElement>(null);
+  const [showSubtasks, setShowSubtasks] = useState(false);
+  const [newSubtaskText, setNewSubtaskText] = useState("");
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const subtaskInputRef = useRef<HTMLInputElement>(null);
+  
+  const currentSubtasks = enableSubtasks ? (todo.subtasks || []) : [];
+  const allSubtasksCompleted = currentSubtasks.length > 0 && currentSubtasks.every(st => st.completed);
   
   const calculateMenuPosition = () => {
     if (!menuBtnRef.current) return;
@@ -1658,8 +1793,8 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
       left = window.innerWidth - menuWidth - menuPadding;
     }
     
-    // Estimate menu height (approximately 40px per item, with 3 items max)
-    const estimatedMenuHeight = 120;
+    // Estimate menu height (approximately 40px per item, with up to 5 items now)
+    const estimatedMenuHeight = 200;
     const spaceBelow = window.innerHeight - rect.bottom - spacing;
     const spaceAbove = rect.top - spacing;
     
@@ -1740,20 +1875,102 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
     if (e.key === 'Enter') handleSaveEdit();
     if (e.key === 'Escape') handleCancelEdit();
   };
+
+  // Subtask handlers
+  const handleAddSubtask = () => {
+    if (newSubtaskText.trim()) {
+      const newSubtask: Subtask = {
+        id: `${Date.now()}-${Math.random()}`,
+        text: newSubtaskText.trim(),
+        completed: false,
+        createdAt: new Date().toISOString(),
+      };
+      onUpdateSubtasks(todo.id, [...currentSubtasks, newSubtask]);
+      setNewSubtaskText("");
+      setIsAddingSubtask(false);
+    }
+  };
+
+  const handleToggleSubtask = (subtaskId: string) => {
+    const updated = currentSubtasks.map(st =>
+      st.id === subtaskId ? { ...st, completed: !st.completed } : st
+    );
+    onUpdateSubtasks(todo.id, updated);
+  };
+
+  const handleDeleteSubtask = (subtaskId: string) => {
+    const updated = currentSubtasks.filter(st => st.id !== subtaskId);
+    onUpdateSubtasks(todo.id, updated);
+  };
+
+  const handleEditSubtask = (subtaskId: string, newText: string) => {
+    if (newText.trim()) {
+      const updated = currentSubtasks.map(st =>
+        st.id === subtaskId ? { ...st, text: newText.trim() } : st
+      );
+      onUpdateSubtasks(todo.id, updated);
+    }
+  };
+
+  const handleSubtaskKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleAddSubtask();
+    } else if (e.key === 'Escape') {
+      setIsAddingSubtask(false);
+      setNewSubtaskText("");
+    }
+  };
+
+  // Toggle subtasks visibility when clicking on the task content (but not on interactive elements)
+  const handleTaskContentClick = (e: React.MouseEvent) => {
+    // Don't toggle if clicking on interactive elements
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('.checkbox') ||
+      target.closest('.menu-btn') ||
+      target.closest('.menu-dropdown') ||
+      target.closest('.todo-edit-row') ||
+      target.closest('.subtasks-container') ||
+      target.closest('.subtask-add-form') ||
+      target.closest('button') ||
+      target.closest('input')
+    ) {
+      return;
+    }
+
+    // Only toggle if subtasks exist and feature is enabled
+    if (enableSubtasks && currentSubtasks.length > 0) {
+      setShowSubtasks(!showSubtasks);
+    }
+  };
+
+  // Auto-focus subtask input when adding
+  useEffect(() => {
+    if (isAddingSubtask && subtaskInputRef.current) {
+      subtaskInputRef.current.focus();
+    }
+  }, [isAddingSubtask]);
   
   return (
-    <li className={`todo-item ${todo.completed ? 'completed' : ''} ${isPaused ? 'paused' : ''} ${isOld ? 'old' : ''}`}>
-      <label className={`checkbox ${isPaused ? 'disabled' : ''}`} title={isPaused ? "Resume task before marking complete" : ""}>
+    <li className={`todo-item ${todo.completed ? 'completed' : ''} ${isPaused ? 'paused' : ''} ${isOld ? 'old' : ''} ${enableSubtasks && (showSubtasks || isAddingSubtask) ? 'subtasks-expanded' : ''}`}>
+      <label 
+        className={`checkbox ${isPaused ? 'disabled' : ''} ${enableSubtasks && !allSubtasksCompleted && currentSubtasks.length > 0 ? 'disabled' : ''}`} 
+        title={
+          isPaused ? "Resume task before marking complete" : 
+          enableSubtasks && !allSubtasksCompleted && currentSubtasks.length > 0 ? "Complete all subtasks first" :
+          ""
+        }
+      >
         <input
           type="checkbox"
           checked={todo.completed}
           onChange={() => onToggle(todo.id)}
-          disabled={isPaused}
+          disabled={isPaused || (enableSubtasks && !allSubtasksCompleted && currentSubtasks.length > 0)}
         />
         <span className="checkbox-visual" />
       </label>
       
-      <div className="todo-content">
+      <div className={`todo-content ${enableSubtasks && currentSubtasks.length > 0 ? 'has-subtasks-clickable' : ''}`} onClick={handleTaskContentClick}>
         {isEditing ? (
           <div className="todo-edit-row">
             <input
@@ -1774,7 +1991,45 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
           <span className="todo-date">{relativeDate}</span>
           {isPaused && <span className="todo-status-badge paused">⏸ Paused</span>}
           {duration && <span className="todo-duration">⏱ {duration}</span>}
+          {enableSubtasks && currentSubtasks.length > 0 && (
+            <span className="subtasks-count">
+              {currentSubtasks.filter(st => st.completed).length}/{currentSubtasks.length} subtasks
+            </span>
+          )}
         </div>
+        {/* Subtasks section - only show when explicitly opened and feature is enabled */}
+        {enableSubtasks && showSubtasks && currentSubtasks.length > 0 && (
+          <div className="subtasks-container">
+            {currentSubtasks.map((subtask) => (
+              <SubtaskItem
+                key={subtask.id}
+                subtask={subtask}
+                onToggle={() => handleToggleSubtask(subtask.id)}
+                onDelete={() => handleDeleteSubtask(subtask.id)}
+                onEdit={(text) => handleEditSubtask(subtask.id, text)}
+                disabled={todo.completed || isPaused}
+              />
+            ))}
+          </div>
+        )}
+        {/* Subtask add form - shown when adding and feature is enabled */}
+        {enableSubtasks && isAddingSubtask && (
+          <div className="subtasks-container">
+            <div className="subtask-add-form">
+              <input
+                ref={subtaskInputRef}
+                type="text"
+                className="subtask-input"
+                value={newSubtaskText}
+                onChange={(e) => setNewSubtaskText(e.target.value)}
+                onKeyDown={handleSubtaskKeyDown}
+                placeholder="Enter subtask..."
+              />
+              <button className="subtask-add-btn" onClick={handleAddSubtask}>Add</button>
+              <button className="subtask-cancel-btn" onClick={() => { setIsAddingSubtask(false); setNewSubtaskText(""); }}>Cancel</button>
+            </div>
+          </div>
+        )}
           </>
         )}
       </div>
@@ -1837,6 +2092,22 @@ function TodoItem({ todo, onToggle, onEdit, onPause, onResume, onDelete }: TodoI
                       Pause
                     </>
                   )}
+                </button>
+              )}
+              {enableSubtasks && !todo.completed && (
+                <button 
+                  className="menu-item"
+                  onClick={() => {
+                    setIsAddingSubtask(true);
+                    setShowSubtasks(true);
+                    setMenuOpen(false);
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Add subtask
                 </button>
               )}
               <button 

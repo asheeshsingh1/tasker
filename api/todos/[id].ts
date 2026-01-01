@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ObjectId } from "mongodb";
-import { connectToDatabase, Todo } from "../_lib/mongodb.js";
+import { connectToDatabase, Todo, Subtask } from "../_lib/mongodb.js";
 import { getUserFromRequest } from "../_lib/auth.js";
 
 // Helper to format todo for response
@@ -15,6 +15,12 @@ function formatTodo(t: Todo) {
     totalPausedTime: t.totalPausedTime || 0,
     completedAt: t.completedAt?.toISOString() || null,
     recurringTaskId: t.recurringTaskId || null,
+    subtasks: (t.subtasks || []).map(st => ({
+      id: st.id,
+      text: st.text,
+      completed: st.completed,
+      createdAt: st.createdAt.toISOString(),
+    })),
   };
 }
 
@@ -115,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // PATCH - Update todo
     if (req.method === "PATCH") {
-      const { text, completed } = req.body;
+      const { text, completed, subtasks } = req.body;
       const updates: Partial<Todo> = {};
       const currentStatus = existing.status || (existing.completed ? 'completed' : 'active');
 
@@ -145,6 +151,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updates.status = 'active';
           updates.completedAt = null;
         }
+      }
+
+      // Handle subtasks update
+      if (Array.isArray(subtasks)) {
+        // Validate subtasks structure
+        const validSubtasks: Subtask[] = subtasks.map((st: any) => {
+          if (!st.id || typeof st.text !== 'string' || typeof st.completed !== 'boolean') {
+            throw new Error("Invalid subtask structure. Each subtask must have id, text, and completed fields.");
+          }
+          return {
+            id: st.id,
+            text: st.text.trim(),
+            completed: st.completed,
+            createdAt: st.createdAt ? new Date(st.createdAt) : new Date(),
+          };
+        });
+        updates.subtasks = validSubtasks;
       }
 
       if (Object.keys(updates).length === 0) {

@@ -318,6 +318,11 @@ body {
   -webkit-tap-highlight-color: transparent; /* Removes tap highlight on iOS */
 }
 
+/* When subtasks are expanded, align checkbox to top with smooth transition */
+.todo-item.subtasks-expanded {
+  align-items: flex-start;
+}
+
 @keyframes itemSlideIn {
   from {
     opacity: 0;
@@ -353,6 +358,12 @@ body {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
+  transition: margin-top 0.3s ease;
+}
+
+/* When subtasks are expanded, align checkbox with text baseline */
+.todo-item.subtasks-expanded .checkbox {
+  margin-top: 2px;
 }
 
 .checkbox input {
@@ -1069,6 +1080,16 @@ body {
   min-width: 0;
 }
 
+/* Show pointer cursor when subtasks exist and can be toggled */
+.todo-content.has-subtasks-clickable {
+  cursor: pointer;
+}
+
+.todo-content:has(.todo-edit-row) {
+  cursor: default;
+}
+
+
 .todo-meta {
   display: flex;
   align-items: center;
@@ -1101,6 +1122,223 @@ body {
 .todo-item.completed .todo-duration {
   color: var(--success);
   background: rgba(74, 158, 107, 0.15);
+}
+
+/* =====================================================
+   SUBTASKS
+   ===================================================== */
+
+.subtasks-count {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.subtasks-container {
+  margin-top: 0.75rem;
+  padding-left: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.3s ease, opacity 0.3s ease, margin-top 0.3s ease;
+}
+
+.todo-item.subtasks-expanded .subtasks-container {
+  max-height: 2000px; /* Large enough to accommodate many subtasks */
+  opacity: 1;
+  margin-top: 0.75rem;
+}
+
+/* Show subtask container when adding (even if no subtasks exist yet) */
+.todo-item.subtasks-expanded .subtasks-container:has(.subtask-add-form),
+.todo-item.subtasks-expanded .subtasks-container {
+  max-height: 2000px;
+  opacity: 1;
+  margin-top: 0.75rem;
+}
+
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.subtask-item:hover {
+  background: var(--bg-item-hover);
+  border-color: var(--border);
+}
+
+.subtask-item.completed {
+  opacity: 0.7;
+}
+
+.subtask-item.completed .subtask-text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.subtask-text {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.subtask-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.subtask-edit-btn,
+.subtask-delete-btn {
+  padding: 0.25rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.subtask-edit-btn:hover {
+  background: var(--bg-item-hover);
+  color: var(--accent);
+}
+
+.subtask-delete-btn:hover {
+  background: rgba(214, 69, 69, 0.1);
+  color: var(--danger);
+}
+
+.subtask-edit-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  width: 100%;
+  flex-wrap: nowrap;
+}
+
+.subtask-edit-input {
+  flex: 1;
+  min-width: 100px;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.subtask-save-btn,
+.subtask-cancel-btn {
+  padding: 0.75rem 1rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  min-height: 44px; /* iOS touch target */
+  flex-shrink: 0;
+}
+
+.subtask-save-btn {
+  background: var(--accent);
+  color: white;
+}
+
+.subtask-save-btn:hover {
+  background: var(--accent-hover);
+}
+
+.subtask-cancel-btn {
+  background: var(--bg-item);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.subtask-cancel-btn:hover {
+  background: var(--bg-item-hover);
+}
+
+.subtask-add-toggle {
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.subtask-add-toggle:hover {
+  background: var(--bg-item-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.subtask-add-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.subtask-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.subtask-add-btn {
+  padding: 0.75rem 1rem;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 44px; /* iOS touch target */
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.subtask-add-btn:hover {
+  background: var(--accent-hover);
 }
 
 /* =====================================================
@@ -2122,9 +2360,96 @@ body {
   color: white;
 }
 
+/* Settings Error Message */
+.settings-error-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin: 0 0 1rem 0;
+  background: rgba(214, 69, 69, 0.1);
+  border: 1px solid rgba(214, 69, 69, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.settings-error-text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.settings-error-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.settings-error-close:hover {
+  background: rgba(214, 69, 69, 0.2);
+}
+
 @media (max-width: 480px) {
   .settings-content {
     padding: 1.5rem;
+  }
+
+  .subtask-edit-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .subtask-edit-input {
+    min-width: 100%;
+    width: 100%;
+  }
+
+  .subtask-save-btn,
+  .subtask-cancel-btn {
+    width: 100%;
+    min-height: 36px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .subtask-add-form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .subtask-input {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .subtask-add-btn {
+    width: 100%;
+    min-height: 36px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .subtask-add-form .subtask-cancel-btn {
+    width: 100%;
+    min-height: 36px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
   }
   
   .view-tab {

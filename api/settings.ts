@@ -33,6 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const preferences: UserPreferences = {
         autoCompleteRecurring: false,
         theme: 'light',
+        enableSubtasks: false,
         ...userDoc.preferences,
       };
 
@@ -62,6 +63,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: "theme must be 'light' or 'dark'" });
         }
         updates.theme = preferences.theme;
+      }
+
+      if (preferences.enableSubtasks !== undefined) {
+        if (typeof preferences.enableSubtasks !== "boolean") {
+          return res.status(400).json({ error: "enableSubtasks must be a boolean" });
+        }
+        updates.enableSubtasks = preferences.enableSubtasks;
       }
 
       // Get existing preferences first
@@ -96,6 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const finalPreferences: UserPreferences = {
         autoCompleteRecurring: false,
         theme: 'light',
+        enableSubtasks: false,
         ...mergedPreferences,
       };
 

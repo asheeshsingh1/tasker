@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react';
 import { getSettings, saveSettings, type AppSettings, DEFAULT_SETTINGS } from '../settings';
+import type { Todo } from '../api';
 
 interface SettingsProps {
   isOpen: boolean;
   onClose: () => void;
   onLogout: () => void;
+  todoList?: Todo[]; // Pass todoList to check for incomplete subtasks
 }
 
-export function Settings({ isOpen, onClose, onLogout }: SettingsProps) {
+export function Settings({ isOpen, onClose, onLogout, todoList = [] }: SettingsProps) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       // Always load fresh settings from database when settings modal opens
+      setError(null); // Clear any previous errors
       loadSettings();
     }
   }, [isOpen]);
@@ -54,6 +58,33 @@ export function Settings({ isOpen, onClose, onLogout }: SettingsProps) {
     }
   };
 
+  const handleToggleSubtasks = async (enabled: boolean) => {
+    // If disabling, check if there are any tasks with incomplete subtasks
+    if (!enabled && settings.enableSubtasks) {
+      const tasksWithIncompleteSubtasks = todoList.filter(todo => {
+        if (!todo.subtasks || todo.subtasks.length === 0) return false;
+        const hasIncomplete = todo.subtasks.some(st => !st.completed);
+        return hasIncomplete && !todo.completed; // Only check incomplete tasks
+      });
+
+      if (tasksWithIncompleteSubtasks.length > 0) {
+        setError(`Cannot disable subtasks. You have ${tasksWithIncompleteSubtasks.length} task(s) with incomplete subtasks. Please complete all subtasks first.`);
+        return;
+      }
+    }
+
+    setError(null);
+    const newSettings = { ...settings, enableSubtasks: enabled };
+    setSettings(newSettings);
+    try {
+      await saveSettings(newSettings);
+    } catch (err) {
+      setError('Failed to save settings. Please try again.');
+      // Revert on error
+      setSettings(settings);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -72,13 +103,25 @@ export function Settings({ isOpen, onClose, onLogout }: SettingsProps) {
           </div>
         )}
 
+        {error && (
+          <div className="settings-error-message">
+            <span className="settings-error-text">{error}</span>
+            <button 
+              className="settings-error-close"
+              onClick={() => setError(null)}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         <div className="settings-section">
           <h3 className="settings-section-title">Recurring Tasks</h3>
           <div className="settings-option">
             <div className="settings-option-label">
               <div className="settings-option-label-title">Auto-complete in-progress tasks</div>
               <div className="settings-option-label-desc">
-                Automatically mark in-progress tasks as completed at the end of the day. Tasks that are not started or paused will be marked as missed.
               </div>
             </div>
             <label className="toggle-switch">
@@ -94,12 +137,31 @@ export function Settings({ isOpen, onClose, onLogout }: SettingsProps) {
         </div>
 
         <div className="settings-section">
+          <h3 className="settings-section-title">Tasks</h3>
+          <div className="settings-option">
+            <div className="settings-option-label">
+              <div className="settings-option-label-title">Enable subtasks</div>
+              <div className="settings-option-label-desc">
+              </div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={settings.enableSubtasks}
+                onChange={(e) => handleToggleSubtasks(e.target.checked)}
+                disabled={loading}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-section">
           <h3 className="settings-section-title">Appearance</h3>
           <div className="settings-option">
             <div className="settings-option-label">
               <div className="settings-option-label-title">Theme</div>
               <div className="settings-option-label-desc">
-                Choose between light and dark theme
               </div>
             </div>
             <div className="theme-selector">

@@ -45,6 +45,7 @@ export async function connectToDatabase(): Promise<{ client: MongoClient; db: Db
 export interface UserPreferences {
   autoCompleteRecurring?: boolean;
   theme?: 'light' | 'dark';
+  enableSubtasks?: boolean;
 }
 
 export interface User {
@@ -60,6 +61,14 @@ export interface User {
 // Todo status type
 export type TodoStatus = 'active' | 'paused' | 'completed';
 
+// Subtask type
+export interface Subtask {
+  id: string; // Client-generated ID (UUID or timestamp-based)
+  text: string;
+  completed: boolean;
+  createdAt: Date;
+}
+
 // Todo type
 export interface Todo {
   _id?: ObjectId;
@@ -72,6 +81,7 @@ export interface Todo {
   totalPausedTime: number; // milliseconds
   completedAt: Date | null;
   recurringTaskId: string | null;
+  subtasks?: Subtask[]; // Array of subtasks
 }
 
 // Recurring task frequency type

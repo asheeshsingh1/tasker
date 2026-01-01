@@ -91,6 +91,13 @@ export const auth = {
 export type TodoStatus = 'active' | 'paused' | 'completed';
 
 // Todos API
+export interface Subtask {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: string;
+}
+
 export interface Todo {
   id: string;
   text: string;
@@ -101,6 +108,7 @@ export interface Todo {
   totalPausedTime: number;
   completedAt: string | null;
   recurringTaskId: number | null;
+  subtasks?: Subtask[];
 }
 
 export const todos = {
@@ -112,7 +120,7 @@ export const todos = {
       body: JSON.stringify({ text, recurringTaskId }),
     }),
 
-  update: (id: string, data: { text?: string; completed?: boolean }) =>
+  update: (id: string, data: { text?: string; completed?: boolean; subtasks?: Subtask[] }) =>
     request<Todo>(`/todos/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -234,6 +242,7 @@ export const recurring = {
 export interface UserPreferences {
   autoCompleteRecurring?: boolean;
   theme?: 'light' | 'dark';
+  enableSubtasks?: boolean;
 }
 
 export const userSettings = {
