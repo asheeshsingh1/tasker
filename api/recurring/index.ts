@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { connectToDatabase, RecurringTask, RecurringFrequency, CompletionRecord } from "../_lib/mongodb.js";
+import { connectToDatabase, RecurringTask, RecurringFrequency, CompletionRecord, User, ObjectId } from "../_lib/mongodb.js";
 import { getUserFromRequest } from "../_lib/auth.js";
 
 // Helper to format recurring task for response
@@ -92,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .sort({ createdAt: -1 })
         .toArray();
 
-      // Mark incomplete past tasks as "missed"
+      // Handle past incomplete tasks based on user's auto-complete setting
       // Use clientDate from query if provided (for timezone support)
       const clientDate = req.query.clientDate as string | undefined;
       let todayStr: string;
@@ -104,15 +104,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       }
 
+      // Get user's preferences to check auto-complete setting
+      const users = db.collection<User>("users");
+      const userDoc = await users.findOne({ _id: new ObjectId(user.userId) });
+      const autoCompleteRecurring = userDoc?.preferences?.autoCompleteRecurring ?? false;
+
       for (const task of tasks) {
         if (task.completions && task.completions.length > 0) {
           let needsUpdate = false;
           const updatedCompletions = task.completions.map(completion => {
             // scheduledDate is already in YYYY-MM-DD format, no conversion needed
             const completionDateStr = completion.scheduledDate;
-            // If it's a past date and status is not 'completed' or 'missed', mark as 'missed'
-            if (completionDateStr < todayStr && completion.status !== 'completed' && completion.status !== 'missed') {
+            
+            // Skip if already completed or missed
+            if (completion.status === 'completed' || completion.status === 'missed') {
+              return completion;
+            }
+            
+            // Only process past dates
+            if (completionDateStr < todayStr) {
               needsUpdate = true;
+              
+              // If auto-complete is enabled and task is in_progress, auto-complete it
+              if (autoCompleteRecurring && completion.status === 'in_progress' && completion.startedAt) {
+                const now = new Date();
+                const totalPausedTime = completion.totalPausedTime || 0;
+                const startedAt = new Date(completion.startedAt);
+                // Calculate timeTaken, ensuring it's never negative
+                const timeTaken = Math.max(0, now.getTime() - startedAt.getTime() - totalPausedTime);
+                
+                return {
+                  ...completion,
+                  completedAt: now,
+                  status: 'completed' as const,
+                  pausedAt: null,
+                  totalPausedTime,
+                  timeTaken,
+                };
+              }
+              
+              // Otherwise, mark as missed (for pending or paused tasks)
               return {
                 ...completion,
                 status: 'missed' as const,
@@ -120,6 +151,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 timeTaken: null,
               };
             }
+            
             return completion;
           });
 
