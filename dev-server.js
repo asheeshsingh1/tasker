@@ -33,16 +33,6 @@ app.get('/api/auth/me', async (req, res) => {
   return handler(req, res);
 });
 
-app.post('/api/auth/send-otp', async (req, res) => {
-  const handler = await loadHandler('./api/auth/send-otp.ts');
-  return handler(req, res);
-});
-
-app.post('/api/auth/verify-otp', async (req, res) => {
-  const handler = await loadHandler('./api/auth/verify-otp.ts');
-  return handler(req, res);
-});
-
 // Todos routes
 app.get('/api/todos', async (req, res) => {
   const handler = await loadHandler('./api/todos/index.ts');
